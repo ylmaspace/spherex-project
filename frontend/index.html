@@ -1,0 +1,168 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>YLMA SPHEREx Explorer | Stellarium Engine</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Exo+2:wght@300;400;500;600;700&family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+
+    <!-- LANDING VIEW -->
+    <div id="landing-view" class="view-container active">
+        <div class="landing-bg"></div>
+        <div class="landing-content">
+            <div class="brand-badge">ESPACIO YLMA</div>
+            <h1 class="landing-title">SPHEREx & STELLARIUM</h1>
+            <p class="landing-subtitle">Exploración celeste en tiempo real con motor Stellarium Web.</p>
+            
+            <div class="landing-cta-container">
+                <button id="explore-btn" class="ylma-btn primary-gold">LANZAR EXPLORADOR</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- EXPLORER VIEW -->
+    <div id="explorer-view" class="view-container">
+        <!-- HEADER -->
+        <header class="explorer-header">
+            <div class="header-left">
+                <div class="brand-logo" id="back-home">ESPACIO YLMA</div>
+                <div class="header-divider"></div>
+                <div class="header-subtitle">STELLARIUM CORE v2.6</div>
+            </div>
+            
+            <div class="header-center">
+                <div class="user-badge" id="user-session-badge">YLMA-USER</div>
+                <div class="score-display">
+                    <span id="header-status-text">BACKEND CONECTADO</span>
+                </div>
+            </div>
+
+            <div class="header-right">
+                <button id="nav-objects-btn" class="ylma-btn outline">OBJETOS VISIBLES</button>
+            </div>
+        </header>
+
+        <!-- SEARCH BAR -->
+        <section class="search-bar-section">
+            <form id="search-form" class="search-form">
+                <div class="input-group">
+                    <label for="input-ra">RA (Asc. Recta)</label>
+                    <input type="text" id="input-ra" value="150.1" required>
+                </div>
+                <div class="input-group">
+                    <label for="input-dec">Dec (Declinación)</label>
+                    <input type="text" id="input-dec" value="2.2" required>
+                </div>
+                <div class="input-group">
+                    <label for="input-radius">FOV / Zoom (°)</label>
+                    <input type="number" step="0.01" id="input-radius" value="45" required>
+                </div>
+                <button type="submit" id="search-btn" class="ylma-btn primary-gold">ACTUALIZAR VISTA</button>
+            </form>
+            <div class="demo-badge-indicator" id="demo-indicator">STELLARIUM API SYNC</div>
+        </section>
+
+        <!-- MAIN WORKSPACE -->
+        <div class="workspace-grid">
+            
+            <!-- LEFT VISOR AREA -->
+            <div class="visor-container">
+                <div class="visor-toolbar">
+                    <div class="visor-mode-title" id="current-mode-label">STELLARIUM WEB ENGINE (OPENGL / CORE)</div>
+                    <div class="visor-controls-group">
+                        <button class="ylma-btn control-btn active" id="layer-realistic">CIELO REAL</button>
+                        <button class="ylma-btn control-btn" id="layer-grid">CUADRÍCULA EQ</button>
+                        <button class="ylma-btn control-btn" id="btn-fs">PANTALLA COMPLETA</button>
+                    </div>
+                </div>
+
+                <!-- STELLARIUM STAGE CONTAINER -->
+                <div class="visor-stage" id="visor-stage">
+                    <div class="loading-overlay" id="loading-overlay">
+                        <div class="spinner"></div>
+                        <div class="loading-text">CARGANDO NÚCLEO STELLARIUM...</div>
+                    </div>
+
+                    <!-- Visor iframe de Stellarium Web sincronizado -->
+                    <iframe id="stellarium-frame" src="https://stellarium-web.org/?lat=2.2&lng=-150.1&fov=45&date=2026-09-30T15:31:00Z" style="width:100%; height:calc(100% - 64px); border:none;" allowfullscreen></iframe>
+
+                    <div class="visor-hud-coords">
+                        <span id="hud-coords">RA: 150.1000 | Dec: +02.2000</span>
+                        <span id="hud-survey">MOTOR: STELLARIUM GL</span>
+                    </div>
+
+                    <!-- CONTROL DESLIZANTE INFERIOR: Sincroniza época, hora y datos del backend -->
+                    <div class="hud-timeline-bottom">
+                        <div class="timeline-top-row">
+                            <span class="timeline-main-title" id="timeline-epoch-title">ÉPOCA: 30 SEP 2026</span>
+                            <div class="timeline-clock-display" id="hud-time-display">15:31:00</div>
+                        </div>
+                        <div class="curved-slider-container">
+                            <input type="range" id="epoch-range" min="0" max="3" value="0" step="1">
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- RIGHT PANEL: OBJECT INFO -->
+            <div class="sidebar-panel">
+                <div class="panel-section">
+                    <h3 class="panel-title">DATOS DE OBSERVACIÓN DEL BACKEND</h3>
+                    <div class="info-grid" id="object-info-grid">
+                        <div class="info-row">
+                            <span class="info-key">Estado API</span>
+                            <span class="info-val ylma-status" id="info-status">Conectado (/api)</span>
+                        </div>
+                        <div class="info-row">
+                            <span class="info-key">Coordenadas Centro</span>
+                            <span class="info-val" id="info-radec">150.100, +2.200</span>
+                        </div>
+                        <div class="info-row">
+                            <span class="info-key">Época Activa</span>
+                            <span class="info-val" id="info-epoch-label">30 Sep 2026 - 15:31</span>
+                        </div>
+                        <div class="info-row">
+                            <span class="info-key">Fuentes Detectadas</span>
+                            <span class="info-val" id="info-count">0 fuentes</span>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="panel-section">
+                    <h3 class="panel-title">ARQUITECTURA DEL SISTEMA</h3>
+                    <p class="doc-text">
+                        Integración basada en el flujo de renderizado y control de eventos de Stellarium[cite: 9], conectada con el backend local FastAPI.
+                    </p>
+                    <a href="http://127.0.0.1:8000/docs" target="_blank" class="ylma-link">Abrir documentación FastAPI &rarr;</a>
+                </div>
+            </div>
+
+        </div>
+    </div>
+
+    <!-- MODAL DE OBJETOS VISIBLES -->
+    <div id="objects-modal" class="modal-overlay">
+        <div class="modal-box">
+            <div class="modal-header">
+                <h3>OBJETOS Y FUENTES EN EL CAMPO ACTUAL</h3>
+                <button class="modal-close" id="objects-close-btn">&times;</button>
+            </div>
+            <div class="modal-body" id="objects-modal-body">
+                <p style="color: #BDBDBD; font-size: 0.85rem; margin-bottom: 16px;">
+                    Resultados dinámicos obtenidos de la API local según la época seleccionada:
+                </p>
+                <div id="objects-list-container" style="display: flex; flex-direction: column; gap: 10px;">
+                    <!-- Rellenado por JavaScript -->
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script src="script.js"></script>
+</body>
+</html>

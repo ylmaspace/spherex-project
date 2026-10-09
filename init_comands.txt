@@ -1,0 +1,8 @@
+cd C:\Users\ylmas\Desktop\spherex-explorer
+python -m uvicorn backend.main:app --reload
+cd backend
+python -m uvicorn main:app --reload
+
+Nueva ventana de PWSH: 
+cd C:\Users\ylmas\Desktop\spherex-explorer\frontend
+python -m http.server 3000

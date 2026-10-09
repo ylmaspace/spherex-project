@@ -1,0 +1,38 @@
+[
+{
+"id": "q001",
+"question": "What primary phenomenon is observable when comparing multi-epoch SPHEREx infrared observations of a high-latitude field?",
+"options": [
+"Apparent proper motion or variability of background/foreground sources",
+"Atmospheric refraction changes caused by Earth's troposphere",
+"Instrumental lens heating artifacts from the sunshade",
+"Immediate stellar supernova collapse in real time"
+],
+"correct": 0,
+"explanation": "SPHEREx multi-epoch infrared surveys allow astronomers to detect proper motion, parallax, and infrared variability across spectral bands."
+},
+{
+"id": "q002",
+"question": "Why is near-infrared spectroscopy and imaging via SPHEREx particularly powerful for examining galactic molecular clouds?",
+"options": [
+"Infrared light penetrates dense cosmic dust clouds that obscure visible light",
+"Infrared wavelengths travel faster than visible light through a vacuum",
+"Infrared instruments require zero cooling mechanisms",
+"Molecular clouds emit exclusively in the ultraviolet spectrum"
+],
+"correct": 0,
+"explanation": "Infrared radiation suffers far less extinction from interstellar dust than optical light, opening up obscured star-forming regions."
+},
+{
+"id": "q003",
+"question": "When utilizing the BLINK comparison mode between Epoch A and Epoch B, what is the primary diagnostic advantage?",
+"options": [
+"Rapid alternation leverages human visual perception to instantly highlight shifting or transient sources",
+"It combines both images into a single false-color RGB image automatically",
+"It measures the exact redshift of distant galaxies without spectroscopy",
+"It recalibrates the spacecraft gyroscope automatically"
+],
+"correct": 0,
+"explanation": "Blink comparators make subtle positional shifts or brightness fluctuations immediately noticeable to the human eye."
+}
+]

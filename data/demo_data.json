@@ -1,0 +1,46 @@
+{
+"region": {
+"ra": 150.1,
+"dec": 2.2,
+"radius": 0.5,
+"name": "COSMOS Field / SPHEREx Test Region"
+},
+"observations": [
+{
+"id": "sphx-2025-03-a",
+"date": "2025-03-14",
+"band": "Band 1 (0.75 - 1.10 um)",
+"instrument": "SPHEREx Spectro-Imager Channel 1",
+"ra": 150.1,
+"dec": 2.2,
+"image_url": "https://irsa.ipac.caltech.edu/ibe/data/spherex/demo/cutout_epoch1.fits.png",
+"fallback_url": "https://images.unsplash.com/photo-1506703719100-a0f3a48c0f86?q=80&w=1200&auto=format&fit=crop",
+"status": "CONFIRMED",
+"notes": "Early survey pass baseline observation."
+},
+{
+"id": "sphx-2025-09-b",
+"date": "2025-09-20",
+"band": "Band 1 (0.75 - 1.10 um)",
+"instrument": "SPHEREx Spectro-Imager Channel 1",
+"ra": 150.1,
+"dec": 2.2,
+"image_url": "https://irsa.ipac.caltech.edu/ibe/data/spherex/demo/cutout_epoch2.fits.png",
+"fallback_url": "https://images.unsplash.com/photo-1451187580459-43490279c0fa?q=80&w=1200&auto=format&fit=crop",
+"status": "CONFIRMED",
+"notes": "Secondary epoch pass showing candidate motion in field source."
+},
+{
+"id": "sphx-2026-03-c",
+"date": "2026-03-10",
+"band": "Band 2 (1.10 - 1.68 um)",
+"instrument": "SPHEREx Spectro-Imager Channel 2",
+"ra": 150.1,
+"dec": 2.2,
+"image_url": "https://irsa.ipac.caltech.edu/ibe/data/spherex/demo/cutout_epoch3.fits.png",
+"fallback_url": "https://images.unsplash.com/photo-1502134249126-9f3755a50d78?q=80&w=1200&auto=format&fit=crop",
+"status": "CANDIDATE",
+"notes": "Expanded infrared band pass comparison."
+}
+]
+}

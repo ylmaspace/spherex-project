@@ -4,8 +4,8 @@
 * **Equipo:** YLMA Space
 * **Proyecto:** YLMA SPHEREx Explorer
 * **Desafío:** Planet X and SPHEREx - NASA Space Apps Challenge 2026
-* **Integrantes y Autores:** Jorge López Susín y Equipo YLMA Space
-* **Organización:** YLMA Space Official (`ylmaspace`)
+* **Integrantes y Autores:** Jorge López Susín, Phillipe Henry Nappi Bugalho, Izan Plazón Sánchez, Aitro Contreras Sánchez y otros.
+* **Organización:** YLMA Space Official (`ylmaspace`) 
 
 ---
 

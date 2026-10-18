@@ -2,11 +2,15 @@
 <html lang="es">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>YLMA SPHEREx Explorer | Stellarium Engine</title>
+    <meta name="viewport" content="width=device-width, height=device-height, initial-scale=1.0, user-scalable=no">
+    <title>YLMA SPHEREx Explorer | Aladin Lite Engine</title>
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Exo+2:wght@300;400;500;600;700&family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    
+    <!-- Aladin Lite CSS -->
+    <link rel="stylesheet" href="https://aladin.cds.unistra.fr/AladinLite/api/v3/latest/aladin.min.css" />
+    
     <link rel="stylesheet" href="styles.css">
 </head>
 <body>
@@ -15,9 +19,9 @@
     <div id="landing-view" class="view-container active">
         <div class="landing-bg"></div>
         <div class="landing-content">
-            <div class="brand-badge">ESPACIO YLMA</div>
-            <h1 class="landing-title">SPHEREx & STELLARIUM</h1>
-            <p class="landing-subtitle">Exploración celeste en tiempo real con motor Stellarium Web.</p>
+            <div class="brand-badge">YLMA SPACE</div>
+            <h1 class="landing-title">SPHEREx & ALADIN LITE</h1>
+            <p class="landing-subtitle">Exploración temporal, vista dividida y comparación parpadeante (Blink).</p>
             
             <div class="landing-cta-container">
                 <button id="explore-btn" class="ylma-btn primary-gold">LANZAR EXPLORADOR</button>
@@ -30,9 +34,9 @@
         <!-- HEADER -->
         <header class="explorer-header">
             <div class="header-left">
-                <div class="brand-logo" id="back-home">ESPACIO YLMA</div>
+                <div class="brand-logo" id="back-home">YLMA SPACE</div>
                 <div class="header-divider"></div>
-                <div class="header-subtitle">STELLARIUM CORE v2.6</div>
+                <div class="header-subtitle">SPHEREx IBE CORE v2.6</div>
             </div>
             
             <div class="header-center">
@@ -52,19 +56,19 @@
             <form id="search-form" class="search-form">
                 <div class="input-group">
                     <label for="input-ra">RA (Asc. Recta)</label>
-                    <input type="text" id="input-ra" value="150.1" required>
+                    <input type="number" step="0.0001" id="input-ra" value="150.1" required>
                 </div>
                 <div class="input-group">
                     <label for="input-dec">Dec (Declinación)</label>
-                    <input type="text" id="input-dec" value="2.2" required>
+                    <input type="number" step="0.0001" id="input-dec" value="2.2" required>
                 </div>
                 <div class="input-group">
                     <label for="input-radius">FOV / Zoom (°)</label>
-                    <input type="number" step="0.01" id="input-radius" value="45" required>
+                    <input type="number" step="0.01" id="input-radius" value="10" required>
                 </div>
-                <button type="submit" id="search-btn" class="ylma-btn primary-gold">ACTUALIZAR VISTA</button>
+                <button type="submit" id="search-btn" class="ylma-btn primary-gold">CONSULTAR IBE</button>
             </form>
-            <div class="demo-badge-indicator" id="demo-indicator">STELLARIUM API SYNC</div>
+            <div class="demo-badge-indicator" id="demo-indicator">SPLIT & BLINK ACTIVE</div>
         </section>
 
         <!-- MAIN WORKSPACE -->
@@ -73,37 +77,57 @@
             <!-- LEFT VISOR AREA -->
             <div class="visor-container">
                 <div class="visor-toolbar">
-                    <div class="visor-mode-title" id="current-mode-label">STELLARIUM WEB ENGINE (OPENGL / CORE)</div>
+                    <div class="visor-mode-title" id="current-mode-label">ALADIN LITE SKY ATLAS (SPHEREx QR2 LEVEL-2)</div>
                     <div class="visor-controls-group">
-                        <button class="ylma-btn control-btn active" id="layer-realistic">CIELO REAL</button>
-                        <button class="ylma-btn control-btn" id="layer-grid">CUADRÍCULA EQ</button>
+                        <button class="ylma-btn control-btn active" id="layer-real">DSS / VIZIER</button>
+                        <button class="ylma-btn control-btn" id="layer-fits">FITS IBE</button>
+                        <button class="ylma-btn control-btn" id="btn-split">VISTA DIVIDIDA</button>
+                        <button class="ylma-btn control-btn" id="btn-blink">PARPADEAR (BLINK)</button>
                         <button class="ylma-btn control-btn" id="btn-fs">PANTALLA COMPLETA</button>
                     </div>
                 </div>
 
-                <!-- STELLARIUM STAGE CONTAINER -->
+                <!-- ALADIN LITE STAGE CONTAINER -->
                 <div class="visor-stage" id="visor-stage">
                     <div class="loading-overlay" id="loading-overlay">
                         <div class="spinner"></div>
-                        <div class="loading-text">CARGANDO NÚCLEO STELLARIUM...</div>
+                        <div class="loading-text">CARGANDO REPOSITORIO IBE...</div>
                     </div>
 
-                    <!-- Visor iframe de Stellarium Web sincronizado -->
-                    <iframe id="stellarium-frame" src="https://stellarium-web.org/?lat=2.2&lng=-150.1&fov=45&date=2026-09-30T15:31:00Z" style="width:100%; height:calc(100% - 64px); border:none;" allowfullscreen></iframe>
+                    <!-- Contenedor Único -->
+                    <div id="aladin-lite-div"></div>
+
+                    <!-- Contenedor de Vista Dividida (Dual Visor con Deslizadores Independientes) -->
+                    <div id="split-view-container">
+                        <div class="split-pane">
+                            <div id="aladin-left-div" class="split-map"></div>
+                            <div class="split-hud-bar">
+                                <span id="split-left-title">ÉPOCA A: 00:00:00</span>
+                                <input type="range" id="split-range-left" min="0" max="59" value="0" step="1">
+                            </div>
+                        </div>
+                        <div class="split-pane">
+                            <div id="aladin-right-div" class="split-map"></div>
+                            <div class="split-hud-bar">
+                                <span id="split-right-title">ÉPOCA B: 00:30:00</span>
+                                <input type="range" id="split-range-right" min="0" max="59" value="30" step="1">
+                            </div>
+                        </div>
+                    </div>
 
                     <div class="visor-hud-coords">
                         <span id="hud-coords">RA: 150.1000 | Dec: +02.2000</span>
-                        <span id="hud-survey">MOTOR: STELLARIUM GL</span>
+                        <span id="hud-survey">SURVEY: DSS2/color</span>
                     </div>
 
-                    <!-- CONTROL DESLIZANTE INFERIOR: Sincroniza época, hora y datos del backend -->
-                    <div class="hud-timeline-bottom">
+                    <!-- CONTROL DESLIZANTE INFERIOR (Modo Normal) -->
+                    <div class="hud-timeline-bottom" id="normal-timeline">
                         <div class="timeline-top-row">
-                            <span class="timeline-main-title" id="timeline-epoch-title">ÉPOCA: 30 SEP 2026</span>
-                            <div class="timeline-clock-display" id="hud-time-display">15:31:00</div>
+                            <span class="timeline-main-title" id="timeline-epoch-title">MINUTO ACTIVO: 01 SEP 2026 - 00:00:00</span>
+                            <div class="timeline-clock-display" id="hud-time-display">00:00:00</div>
                         </div>
                         <div class="curved-slider-container">
-                            <input type="range" id="epoch-range" min="0" max="3" value="0" step="1">
+                            <input type="range" id="epoch-range" min="0" max="59" value="0" step="1">
                         </div>
                     </div>
                 </div>
@@ -112,7 +136,7 @@
             <!-- RIGHT PANEL: OBJECT INFO -->
             <div class="sidebar-panel">
                 <div class="panel-section">
-                    <h3 class="panel-title">DATOS DE OBSERVACIÓN DEL BACKEND</h3>
+                    <h3 class="panel-title">DATOS DE OBSERVACIÓN</h3>
                     <div class="info-grid" id="object-info-grid">
                         <div class="info-row">
                             <span class="info-key">Estado API</span>
@@ -123,11 +147,11 @@
                             <span class="info-val" id="info-radec">150.100, +2.200</span>
                         </div>
                         <div class="info-row">
-                            <span class="info-key">Época Activa</span>
-                            <span class="info-val" id="info-epoch-label">30 Sep 2026 - 15:31</span>
+                            <span class="info-key">Archivo FITS Activo</span>
+                            <span class="info-val" id="info-epoch-label">level2_20260901_0000_spx.fits</span>
                         </div>
                         <div class="info-row">
-                            <span class="info-key">Fuentes Detectadas</span>
+                            <span class="info-key">Fuentes en Minuto</span>
                             <span class="info-val" id="info-count">0 fuentes</span>
                         </div>
                     </div>
@@ -136,7 +160,7 @@
                 <div class="panel-section">
                     <h3 class="panel-title">ARQUITECTURA DEL SISTEMA</h3>
                     <p class="doc-text">
-                        Integración basada en el flujo de renderizado y control de eventos de Stellarium[cite: 9], conectada con el backend local FastAPI.
+                        Sincronización avanzada con Vista Dividida Dual e interpolación parpadeante Blink para análisis diferencial.
                     </p>
                     <a href="http://127.0.0.1:8000/docs" target="_blank" class="ylma-link">Abrir documentación FastAPI &rarr;</a>
                 </div>
@@ -149,12 +173,12 @@
     <div id="objects-modal" class="modal-overlay">
         <div class="modal-box">
             <div class="modal-header">
-                <h3>OBJETOS Y FUENTES EN EL CAMPO ACTUAL</h3>
+                <h3>OBJETOS Y FUENTES EN LA UBICACIÓN Y MINUTO</h3>
                 <button class="modal-close" id="objects-close-btn">&times;</button>
             </div>
             <div class="modal-body" id="objects-modal-body">
                 <p style="color: #BDBDBD; font-size: 0.85rem; margin-bottom: 16px;">
-                    Resultados dinámicos obtenidos de la API local según la época seleccionada:
+                    Resultados filtrados por coordenadas y minuto de observación exacto:
                 </p>
                 <div id="objects-list-container" style="display: flex; flex-direction: column; gap: 10px;">
                     <!-- Rellenado por JavaScript -->
@@ -163,6 +187,37 @@
         </div>
     </div>
 
+    <!-- MODAL DE BLINK INTERACTIVO -->
+    <div id="blink-modal" class="modal-overlay">
+        <div class="modal-box" style="max-width: 700px;">
+            <div class="modal-header">
+                <h3>COMPARADOR INTERACTIVO BLINK (PARPADEO)</h3>
+                <button class="modal-close" id="blink-close-btn">&times;</button>
+            </div>
+            <div class="modal-body" style="display: flex; flex-direction: column; gap: 16px; align-items: center;">
+                <p style="color: #BDBDBD; font-size: 0.85rem; text-align: center;">
+                    Comparando la misma posición estelar alternando entre dos épocas temporales automáticamente.
+                </p>
+                <div id="blink-preview-box" style="width: 100%; height: 320px; background: #000; border: 1px solid var(--ylma-gold); position: relative; display: flex; justify-content: center; align-items: center;">
+                    <div id="blink-status-label" style="position: absolute; top: 10px; left: 10px; background: rgba(0,0,0,0.8); padding: 4px 8px; color: var(--ylma-gold); font-size: 0.75rem; font-weight: 700;">ÉPOCA A</div>
+                </div>
+                <div style="display: flex; gap: 16px; width: 100%; justify-content: space-between;">
+                    <div>
+                        <label style="font-size: 0.75rem; color: var(--text-muted);">Época 1:</label>
+                        <select id="blink-epoch-1" style="background: #111; color: #fff; border: 1px solid var(--border-subtle); padding: 6px;"></select>
+                    </div>
+                    <div>
+                        <label style="font-size: 0.75rem; color: var(--text-muted);">Época 2:</label>
+                        <select id="blink-epoch-2" style="background: #111; color: #fff; border: 1px solid var(--border-subtle); padding: 6px;"></select>
+                    </div>
+                    <button id="blink-start-toggle" class="ylma-btn primary-gold" style="padding: 6px 16px;">INICIAR BLINK</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Aladin Lite JS API -->
+    <script type="text/javascript" src="https://aladin.cds.unistra.fr/AladinLite/api/v3/latest/aladin.js" charset="utf-8"></script>
     <script src="script.js"></script>
 </body>
 </html>

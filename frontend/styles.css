@@ -280,7 +280,58 @@ body {
     width: 100% !important;
     height: 100% !important;
     position: absolute !important;
-    inset: 0 !important;
+    top: 0 !important;
+    left: 0 !important;
+    z-index: 1;
+}
+
+/* --- ESTILOS VISTA DIVIDIDA (SPLIT VIEW) --- */
+#split-view-container {
+    display: none;
+    width: 100%;
+    height: 100%;
+    position: absolute;
+    inset: 0;
+    z-index: 20;
+    background: #000;
+    grid-template-columns: 1fr 1fr;
+    gap: 2px;
+}
+
+.split-pane {
+    position: relative;
+    width: 100%;
+    height: 100%;
+    display: flex;
+    flex-direction: column;
+}
+
+.split-map {
+    width: 100%;
+    flex-grow: 1;
+}
+
+.split-hud-bar {
+    background: rgba(5, 5, 5, 0.95);
+    border-top: 1px solid var(--border-subtle);
+    padding: 8px 12px;
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    flex-shrink: 0;
+}
+
+.split-hud-bar span {
+    font-size: 0.7rem;
+    color: var(--ylma-gold);
+    font-weight: 700;
+    letter-spacing: 0.1em;
+}
+
+.split-hud-bar input[type="range"] {
+    width: 100%;
+    height: 4px;
+    accent-color: var(--ylma-gold);
 }
 
 .loading-overlay {
@@ -338,7 +389,7 @@ body {
     pointer-events: none;
 }
 
-/* --- HUD INFERIOR FIJO (Estilo exacto de tu boceto inferior) --- */
+/* --- HUD INFERIOR FIJO --- */
 .hud-timeline-bottom {
     position: absolute;
     bottom: 0;
@@ -351,7 +402,7 @@ body {
     display: flex;
     flex-direction: column;
     gap: 6px;
-    z-index: 25;
+    z-index: 30 !important;
 }
 
 .timeline-top-row {
@@ -373,35 +424,6 @@ body {
     letter-spacing: 0.1em;
     color: var(--text-white);
     text-shadow: 0 0 10px var(--ylma-gold-glow);
-}
-
-.timeline-controls-row {
-    display: flex;
-    justify-content: center;
-    gap: 16px;
-    align-items: center;
-}
-
-.hud-playback-btn {
-    background: rgba(255, 255, 255, 0.06);
-    border: 1px solid var(--border-subtle);
-    color: var(--text-white);
-    width: 28px;
-    height: 28px;
-    border-radius: 50%;
-    cursor: pointer;
-    display: flex;
-    justify-content: center;
-    align-items: center;
-    font-size: 0.75rem;
-    transition: all 0.2s;
-}
-
-.hud-playback-btn:hover, .hud-playback-btn.active {
-    background: var(--ylma-gold);
-    color: #000;
-    border-color: var(--ylma-gold);
-    box-shadow: 0 0 10px var(--ylma-gold-glow);
 }
 
 .curved-slider-container {
@@ -558,4 +580,8 @@ body {
 .modal-body {
     padding: 24px;
     overflow-y: auto;
+}
+
+.aladin-zoom-control {
+    bottom: 90px !important;
 }

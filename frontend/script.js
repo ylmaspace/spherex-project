@@ -131,7 +131,7 @@ function setupEventListeners() {
 
 async function loadLocalFits(file) {
     const name = String(file.name || '');
-    if (!/\\.(fits?|fts)(\\.gz)?$/i.test(name)) {
+    if (!/\.(fits?|fts)$/i.test(name)) {
         setObservationStatus('Formato no válido. Selecciona un archivo FITS.', '');
         return;
     }

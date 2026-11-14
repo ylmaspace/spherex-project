@@ -672,3 +672,101 @@ body {
     background: rgba(30, 24, 5, 0.94);
     box-shadow: 0 0 18px rgba(255, 193, 7, 0.14);
 }
+
+
+/* FITS import workspace */
+.fits-dropzone {
+    position: absolute;
+    z-index: 12;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    width: min(520px, calc(100% - 40px));
+    min-height: 245px;
+    max-width: 520px;
+    padding: 28px 30px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 12px;
+    text-align: center;
+    border: 1px dashed rgba(255, 183, 0, .72);
+    border-radius: 8px;
+    background: linear-gradient(145deg, rgba(18, 17, 10, .96), rgba(5, 7, 9, .96));
+    color: var(--text-white);
+    cursor: pointer;
+    box-shadow: 0 18px 55px rgba(0,0,0,.38), 0 0 32px rgba(255,183,0,.08);
+    transition: border-color .18s ease, background .18s ease, box-shadow .18s ease;
+}
+.fits-dropzone strong { color: var(--ylma-gold); font-size: .94rem; letter-spacing: .1em; }
+.fits-dropzone span { color: var(--text-white); font-size: .82rem; }
+.fits-dropzone small { color: var(--text-muted); font-size: .7rem; line-height: 1.5; }
+.fits-dropzone:hover, .fits-dropzone:focus-visible, .fits-dropzone.drag-active {
+    outline: none;
+    border-color: #ffd65c;
+    background: linear-gradient(145deg, rgba(40, 31, 8, .98), rgba(5, 7, 9, .98));
+    box-shadow: 0 0 35px rgba(255,183,0,.2);
+}
+.fits-drop-icon {
+    display: grid;
+    place-items: center;
+    width: 64px;
+    height: 64px;
+    border: 1px solid var(--ylma-gold);
+    border-radius: 12px;
+    color: var(--ylma-gold);
+    font-weight: 800;
+    letter-spacing: .12em;
+    background: rgba(255,183,0,.08);
+}
+.fits-drop-button { margin-top: 5px; }
+.fits-progress-overlay {
+    display: none;
+    position: absolute;
+    z-index: 50;
+    inset: 0;
+    align-items: center;
+    justify-content: center;
+    background: rgba(0,0,0,.82);
+    backdrop-filter: blur(8px);
+}
+.fits-progress-overlay.active { display: flex; }
+.fits-progress-card {
+    width: min(440px, calc(100% - 36px));
+    padding: 30px;
+    border: 1px solid rgba(255,183,0,.55);
+    border-radius: 8px;
+    background: #090909;
+    text-align: center;
+    box-shadow: 0 18px 60px rgba(0,0,0,.5);
+}
+.fits-progress-card h3 { color: var(--ylma-gold); font-size: .95rem; letter-spacing: .12em; margin: 15px 0 10px; }
+.fits-progress-card p { color: var(--text-muted); font-size: .82rem; margin-bottom: 18px; }
+.fits-progress-track { height: 8px; background: #242424; border-radius: 20px; overflow: hidden; margin-bottom: 10px; }
+.fits-progress-track div { width: 0; height: 100%; background: var(--ylma-gold); transition: width .18s ease; }
+.fits-progress-card strong { color: var(--ylma-gold); font-size: .8rem; }
+.fits-progress-orbit {
+    width: 42px; height: 42px; margin: auto;
+    border: 3px solid rgba(255,183,0,.2);
+    border-top-color: var(--ylma-gold);
+    border-radius: 50%;
+    animation: fits-orbit .8s linear infinite;
+}
+@keyframes fits-orbit { to { transform: rotate(360deg); } }
+.saved-sky-summary { color: var(--ylma-gold); font-size: .72rem; margin: 8px 0; }
+.saved-sky-list { display: flex; flex-direction: column; gap: 7px; max-height: 230px; overflow: auto; }
+.saved-sky-item {
+    display: flex; flex-direction: column; gap: 4px; width: 100%;
+    padding: 10px; border: 1px solid var(--border-subtle);
+    background: #090909; color: var(--text-white); text-align: left;
+    font: inherit; cursor: pointer;
+}
+.saved-sky-item:hover, .saved-sky-item:focus-visible { border-color: var(--ylma-gold); outline: none; }
+.saved-sky-item strong { color: var(--ylma-gold); font-size: .72rem; overflow-wrap: anywhere; }
+.saved-sky-item span { color: var(--text-muted); font-size: .66rem; }
+.saved-sky-item button { align-self: flex-end; border: 0; background: transparent; color: #ff8b72; cursor: pointer; font-size: .65rem; }
+@media (max-width: 900px) {
+    .fits-dropzone { min-height: 205px; padding: 22px 18px; }
+    .fits-dropzone strong { font-size: .8rem; }
+}

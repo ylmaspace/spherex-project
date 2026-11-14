@@ -114,6 +114,17 @@
                     </div>
                     <!-- Contenedor Único -->
                     <div id="aladin-lite-div"></div>
+                    <section id="fits-local-viewer" class="fits-local-viewer" aria-label="Visor FITS independiente" hidden>
+                        <div class="fits-local-toolbar">
+                            <strong id="fits-local-title">IMAGEN FITS</strong>
+                            <span id="fits-local-coords">RA — · Dec —</span>
+                            <button type="button" id="fits-local-reset">AJUSTAR</button>
+                        </div>
+                        <div id="fits-local-viewport" class="fits-local-viewport">
+                            <img id="fits-local-image" alt="Vista científica de la imagen FITS seleccionada" draggable="false">
+                        </div>
+                        <div class="fits-local-footer">VISOR LOCAL · SIN DEPENDENCIA DE ALADIN / CDS · RUEDA: ZOOM · ARRASTRAR: MOVER</div>
+                    </section>
 
                     <!-- Contenedor de Vista Dividida (Dual Visor con Deslizadores Independientes) -->
                     <div id="split-view-container">

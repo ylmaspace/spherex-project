@@ -826,6 +826,12 @@ function renderObservationList(message = '') {
 }
 
 function toggleSplitView() {
+    if (activeLocalFitsUrl && !comparisonLocalFitsUrl) {
+        pendingLocalCompareMode = 'split';
+        setObservationStatus('Carga una segunda imagen FITS para compararla en vista dividida.', '');
+        byId('compare-fits-input')?.click();
+        return;
+    }
     if (activeLocalFitsUrl && comparisonLocalFitsUrl) {
         isSplitMode = !isSplitMode;
         byId('btn-split')?.classList.toggle('active', isSplitMode);

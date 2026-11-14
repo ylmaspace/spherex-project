@@ -90,6 +90,17 @@
                     </div>
                 </div>
 
+                <div class="fits-url-import" role="group" aria-label="Cargar FITS desde URL">
+                    <label for="fits-url-input">CARGAR FITS DESDE URL DE IRSA</label>
+                    <div class="fits-url-controls">
+                        <input id="fits-url-input" type="url" inputmode="url" autocomplete="url"
+                            placeholder="https://irsa.ipac.caltech.edu/ibe/data/spherex/...fits"
+                            aria-label="URL directa del archivo FITS">
+                        <button id="load-fits-url-btn" class="ylma-btn primary-gold" type="button">CARGAR URL</button>
+                    </div>
+                    <small>HTTPS · Archivo SPHEREx IBE · máximo 120 MB</small>
+                </div>
+
                 <!-- ALADIN LITE STAGE CONTAINER -->
                 <div class="visor-stage" id="visor-stage">
                     <div class="loading-overlay" id="loading-overlay">

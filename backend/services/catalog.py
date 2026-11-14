@@ -105,7 +105,7 @@ class IRSAFileCatalog:
         return entries
 
     @staticmethod
-    def _parse_listing(body: str, response_url: httpx.URL) -> list[CatalogEntry]:
+    def _parse_listing(body: str, response_url: httpx.URL, path: str | None = None) -> list[CatalogEntry]:
         base_url = str(response_url)
         try:
             import json

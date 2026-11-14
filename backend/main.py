@@ -7,7 +7,7 @@ from pathlib import Path
 
 from fastapi import Depends, FastAPI, HTTPException, Query, Request
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import JSONResponse
+from fastapi.responses import JSONResponse, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 from sqlalchemy.orm import Session
 
@@ -15,6 +15,7 @@ from backend.database import Base, engine, get_db
 from backend.models import AnswerLog, User
 from backend.schemas import AnswerResponse, AnswerSubmit, StatsResponse, UserCreate, UserResponse
 from backend.services.irsa import IRSAUnavailableError, ObservationNotFoundError
+from backend.services.catalog import CatalogError, IRSAFileCatalog
 from backend.services.questions import QuestionsService
 from backend.services.spherex import SPHERExService
 from backend.services.statistics import StatisticsService
@@ -53,6 +54,7 @@ async def request_rate_limit(request: Request, call_next):
     return await call_next(request)
 
 spherex_service = SPHERExService()
+catalog_service = IRSAFileCatalog()
 questions_service = QuestionsService()
 
 @app.get("/api/health")
@@ -92,6 +94,50 @@ async def get_observation_detail(obs_id: str):
     except IRSAUnavailableError as exc:
         logger.warning("IRSA observation detail unavailable: %s", exc)
         raise HTTPException(status_code=503, detail="El archivo IRSA no está disponible o no tiene un esquema compatible.") from exc
+
+@app.get("/api/catalog")
+async def get_catalog(
+    path: str = Query("", max_length=512),
+    query: str = Query("", max_length=200),
+    detector: str = Query("", max_length=40),
+    planning_period: str = Query("", max_length=80),
+    date: str = Query("", max_length=40),
+    band: str = Query("", max_length=40),
+    page: int = Query(1, ge=1, le=100000),
+    page_size: int = Query(50, ge=1, le=100),
+    sort: str = Query("name", pattern="^(name|path|detector)$"),
+):
+    try:
+        return await catalog_service.search(
+            path=path, query=query, detector=detector,
+            planning_period=planning_period, date=date, band=band,
+            page=page, page_size=page_size, sort=sort,
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    except CatalogError as exc:
+        logger.warning("IRSA catalog unavailable: %s", exc)
+        raise HTTPException(status_code=503, detail="El catálogo QR2 Level 2 de IRSA no está disponible.") from exc
+
+
+@app.get("/api/fits")
+async def get_fits(path: str = Query(..., min_length=1, max_length=1024), request: Request = None):
+    try:
+        range_header = request.headers.get("range") if request else None
+        upstream, chunks = await catalog_service.stream_fits(path, range_header)
+        headers = {}
+        for key in ("content-length", "content-range", "accept-ranges", "last-modified", "etag"):
+            if key in upstream.headers:
+                headers[key] = upstream.headers[key]
+        headers["Cache-Control"] = "public, max-age=300"
+        media_type = upstream.headers.get("content-type", "application/fits")
+        return StreamingResponse(chunks, status_code=upstream.status_code, media_type=media_type, headers=headers)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    except CatalogError as exc:
+        logger.warning("IRSA FITS unavailable: %s", exc)
+        raise HTTPException(status_code=503, detail="El producto FITS solicitado no está disponible en IRSA.") from exc
+
 
 @app.get("/api/questions")
 def get_questions():

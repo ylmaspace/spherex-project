@@ -187,14 +187,15 @@
                 </div>
 
                 <div class="panel-section catalog-panel">
-                    <h3 class="panel-title">ARCHIVO QR2 · SOLO DESCARGA</h3>
-                    <p class="doc-text">QR2 ya no admite búsquedas científicas: solo permite explorar y descargar sus archivos hasta febrero de 2027. Para buscar observaciones actuales, usa la consulta DR1 + QR3.</p>
-                    <label class="catalog-label" for="catalog-path">Directorio relativo</label>
-                    <input id="catalog-path" class="catalog-input" type="text" value="" placeholder="Raíz del catálogo">
-                    <label class="catalog-label" for="catalog-query">Filtrar nombre</label>
-                    <input id="catalog-query" class="catalog-input" type="text" placeholder="Buscar FITS…">
-                    <button id="catalog-search-btn" class="ylma-btn primary-gold catalog-search-btn" type="button">EXPLORAR CATÁLOGO</button>
-                    <div id="catalog-status" class="doc-text" role="status" aria-live="polite">Catálogo sin consultar.</div>
+                    <h3 class="panel-title">ARCHIVO SPHEREx · IRSA</h3>
+                    <p class="doc-text">Explora directorios oficiales y descarga archivos FITS. Puedes pegar una URL de directorio de IRSA o una ruta relativa. QR2 está disponible para descarga; para nuevas observaciones se utilizan DR1 y QR3.</p>
+                    <label class="catalog-label" for="catalog-path">URL o ruta del directorio</label>
+                    <input id="catalog-path" class="catalog-input" type="text" value="https://irsa.ipac.caltech.edu/ibe/data/spherex/" placeholder="https://irsa.ipac.caltech.edu/ibe/data/spherex/">
+                    <div class="catalog-actions">
+                        <button id="catalog-up-btn" class="ylma-btn outline catalog-up-btn" type="button">← SUBIR NIVEL</button>
+                        <button id="catalog-search-btn" class="ylma-btn primary-gold catalog-search-btn" type="button">EXPLORAR</button>
+                    </div>
+                    <div id="catalog-status" class="doc-text" role="status" aria-live="polite">Archivo IRSA listo para explorar.</div>
                     <div id="catalog-results" class="catalog-results"></div>
                 </div>
 

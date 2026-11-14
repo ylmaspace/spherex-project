@@ -311,7 +311,7 @@ function updateSkyCoordinates(result) {
 }
 
 async function loadLocalFitsBatch(files) {
-    const fitsFiles = files.filter((file) => /\\.(fits?|fts)$/i.test(file.name || ''));
+    const fitsFiles = files.filter((file) => /\.(fits?|fts)$/i.test(file.name || ''));
     if (!fitsFiles.length) {
         setObservationStatus('No se encontraron archivos FITS válidos en la selección.', '');
         return;
@@ -325,7 +325,7 @@ async function loadLocalFitsBatch(files) {
 
 async function loadLocalFits(file, existingRecordId = null) {
     const name = String(file?.name || 'observation.fits');
-    if (!/\\.(fits?|fts)$/i.test(name)) {
+    if (!/\.(fits?|fts)$/i.test(name)) {
         setObservationStatus('Formato no válido. Selecciona un FITS sin comprimir.', '');
         return;
     }
@@ -626,7 +626,7 @@ function observationUrl(item) {
     try {
         const url = new URL(value);
         return url.protocol === 'https:' && url.hostname === 'irsa.ipac.caltech.edu' &&
-            url.pathname.startsWith('/ibe/data/spherex/') && /\\.(fits?|fts)$/i.test(url.pathname)
+            url.pathname.startsWith('/ibe/data/spherex/') && /\.(fits?|fts)$/i.test(url.pathname)
             ? url.href : null;
     } catch { return null; }
 }

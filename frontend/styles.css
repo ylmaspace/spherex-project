@@ -770,3 +770,5 @@ body {
     .fits-dropzone { min-height: 205px; padding: 22px 18px; }
     .fits-dropzone strong { font-size: .8rem; }
 }
+
+.fits-dropzone.fits-loaded { opacity: .08; pointer-events: none; transition: opacity .35s ease; }

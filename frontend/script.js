@@ -464,14 +464,18 @@ async function loadComparisonFits(file) {
         if (!blob.size || !blob.type.startsWith('image/')) throw new Error('El servidor no devolvió una vista previa de imagen válida.');
         const nextUrl = URL.createObjectURL(blob);
         const probe = new Image();
-        await new Promise((resolve, reject) => {
-            probe.onload = resolve;
-            probe.onerror = () => reject(new Error('El navegador no pudo decodificar la vista previa de la segunda FITS.'));
-            probe.src = nextUrl;
-        });
-        if (!probe.naturalWidth || !probe.naturalHeight) {
+        try {
+            await new Promise((resolve, reject) => {
+                probe.onload = resolve;
+                probe.onerror = () => reject(new Error('El navegador no pudo decodificar la vista previa de la segunda FITS.'));
+                probe.src = nextUrl;
+            });
+            if (!probe.naturalWidth || !probe.naturalHeight) {
+                throw new Error('La segunda FITS generó una imagen sin dimensiones válidas.');
+            }
+        } catch (previewError) {
             URL.revokeObjectURL(nextUrl);
-            throw new Error('La segunda FITS generó una imagen sin dimensiones válidas.');
+            throw previewError;
         }
         if (comparisonLocalFitsUrl) URL.revokeObjectURL(comparisonLocalFitsUrl);
         comparisonLocalFitsUrl = nextUrl;

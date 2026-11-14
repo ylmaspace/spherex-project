@@ -11,6 +11,7 @@ let requestController = null;
 let activeLocalFitsUrl = null;
 let comparisonLocalFitsUrl = null;
 let comparisonLocalFitsName = '';
+let pendingLocalCompareMode = null;
 let blinkLocalShowingSecond = false;
 let fitsLoadToken = 0;
 let skyMarkerLayer = null;
@@ -90,6 +91,8 @@ function setupEventListeners() {
     });
     byId('select-fits-btn')?.addEventListener('click', () => byId('local-fits-input')?.click());
     byId('compare-fits-btn')?.addEventListener('click', () => byId('compare-fits-input')?.click());
+    byId('blink-compare-upload')?.addEventListener('click', () => byId('compare-fits-input')?.click());
+    byId('split-compare-upload')?.addEventListener('click', () => byId('compare-fits-input')?.click());
     byId('compare-fits-input')?.addEventListener('change', async (event) => {
         const file = event.target.files?.[0];
         event.target.value = '';
@@ -390,6 +393,10 @@ async function loadComparisonFits(file) {
         setObservationStatus('Segunda imagen lista para comparar: ' + file.name, result.width + '×' + result.height);
         showFitsProgress('COMPARACIÓN PREPARADA', 'Ya puedes usar Parpadear o Vista dividida.', 100);
         setTimeout(hideFitsProgress, 700);
+        if (pendingLocalCompareMode === 'split') {
+            pendingLocalCompareMode = null;
+            if (!isSplitMode) toggleSplitView();
+        }
     } catch (error) {
         hideFitsProgress();
         console.error('FITS comparison upload failed', error);
@@ -831,8 +838,14 @@ function toggleSplitView() {
         return;
     }
     if (!observations.length) {
-        setObservationStatus('Carga dos imágenes FITS (principal y comparación) o consulta observaciones IRSA para usar la vista dividida.', '');
-        byId('compare-fits-input')?.click();
+        if (activeLocalFitsUrl) {
+            pendingLocalCompareMode = 'split';
+            setObservationStatus('Selecciona ahora la segunda imagen FITS para abrir la vista dividida.', '');
+            byId('compare-fits-input')?.click();
+        } else {
+            setObservationStatus('Primero incorpora una imagen FITS principal.', '');
+            byId('local-fits-input')?.click();
+        }
         return;
     }
     isSplitMode = !isSplitMode;

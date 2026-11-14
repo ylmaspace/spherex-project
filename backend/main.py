@@ -124,12 +124,17 @@ async def get_catalog(
 @app.post("/api/fits/upload")
 async def upload_local_fits(file: UploadFile = File(...)):
     """Inspect a local FITS, select the best 2D image HDU and extract its celestial WCS."""
-    filename = file.filename or "observation.fits"
+    filename = Path(file.filename or "observation.fits").name
+    logger.info("FITS upload received: filename=%s content_type=%s", filename, file.content_type)
     if not filename.lower().endswith((".fits", ".fit", ".fts")):
+        await file.close()
         raise HTTPException(status_code=415, detail="Formato no admitido. Sube un FITS sin comprimir.")
-    content = await file.read(MAX_UPLOAD_BYTES + 1)
-    await file.close()
+    try:
+        content = await file.read(MAX_UPLOAD_BYTES + 1)
+    finally:
+        await file.close()
     if len(content) > MAX_UPLOAD_BYTES:
+        logger.warning("FITS upload rejected: filename=%s size_bytes=%s", filename, len(content))
         raise HTTPException(status_code=413, detail="El archivo supera el límite de 120 MB.")
     try:
         result = process_fits_upload(filename, content)
@@ -137,8 +142,14 @@ async def upload_local_fits(file: UploadFile = File(...)):
         result.pop("preview_path", None)
         result["display_url"] = f"/api/fits/local/{result['id']}"
         result["preview_url"] = f"/api/fits/preview/{result['id']}"
+        logger.info(
+            "FITS upload processed: id=%s filename=%s dimensions=%sx%s hdu=%s ra=%s dec=%s",
+            result["id"], filename, result["width"], result["height"],
+            result["hdu_index"], result["ra"], result["dec"],
+        )
         return result
     except FITSProcessingError as exc:
+        logger.warning("FITS upload processing failed: filename=%s error=%s", filename, exc)
         raise HTTPException(status_code=422, detail=str(exc)) from exc
 
 

@@ -6,6 +6,7 @@ let isSplitMode = false;
 let blinkInterval = null;
 let isBlinkingActive = false;
 let observations = [];
+let catalogEntries = [];
 let requestController = null;
 let state = {
     userId: localStorage.getItem('ylma_user_id') || 'YLMA-USER-2026',
@@ -47,6 +48,9 @@ function setupEventListeners() {
         byId('explorer-view').classList.remove('active');
         byId('landing-view').classList.add('active');
     });
+    byId('catalog-search-btn')?.addEventListener('click', loadCatalog);
+    byId('catalog-query')?.addEventListener('keydown', (event) => { if (event.key === 'Enter') loadCatalog(); });
+    byId('catalog-path')?.addEventListener('keydown', (event) => { if (event.key === 'Enter') loadCatalog(); });
     byId('search-form')?.addEventListener('submit', async (event) => {
         event.preventDefault();
         state.currentRA = Number(byId('input-ra').value);
@@ -181,6 +185,69 @@ async function searchObservations() {
         renderObservationList('IRSA no está disponible. No se muestran datos simulados como resultados.');
         if (aladin) aladin.setImageSurvey('P/DSS2/color');
     }
+}
+
+async function loadCatalog() {
+    const path = byId('catalog-path')?.value.trim() || '';
+    const query = byId('catalog-query')?.value.trim() || '';
+    const status = byId('catalog-status');
+    const results = byId('catalog-results');
+    if (status) status.textContent = 'Consultando el listado oficial de IRSA…';
+    if (results) results.replaceChildren();
+    const params = new URLSearchParams({ path, query, page: '1', page_size: '40' });
+    try {
+        const response = await fetch(`/api/catalog?${params}`);
+        const payload = await response.json();
+        if (!response.ok) throw new Error(payload.detail || `Error HTTP ${response.status}`);
+        catalogEntries = [...(payload.directories || []), ...(payload.observations || [])];
+        if (status) status.textContent = `${payload.count} producto(s) FITS en este directorio · ${payload.path || 'raíz IRSA'}`;
+        renderCatalogEntries(catalogEntries);
+    } catch (error) {
+        catalogEntries = [];
+        if (status) status.textContent = `No se pudo consultar IRSA: ${error.message}`;
+    }
+}
+
+function renderCatalogEntries(entries) {
+    const container = byId('catalog-results');
+    if (!container) return;
+    container.replaceChildren();
+    if (!entries.length) {
+        const empty = document.createElement('p');
+        empty.className = 'doc-text';
+        empty.textContent = 'No hay directorios o productos FITS en este resultado.';
+        container.appendChild(empty);
+        return;
+    }
+    entries.forEach((entry) => {
+        const button = document.createElement('button');
+        button.type = 'button';
+        button.className = 'catalog-entry';
+        const isDirectory = entry.kind === 'directory' || Boolean(entry.url && !entry.kind);
+        button.textContent = `${isDirectory ? '📁' : 'FITS'}  ${entry.name}`;
+        button.title = entry.path;
+        button.addEventListener('click', async () => {
+            if (isDirectory) {
+                if (byId('catalog-path')) byId('catalog-path').value = entry.path;
+                await loadCatalog();
+                return;
+            }
+            if (!entry.path || !entry.name.toLowerCase().match(/\.(fits?|fts)(\.gz)?$/i)) return;
+            if (!aladin) await initAladinViewer();
+            const productUrl = `/api/fits?path=${encodeURIComponent(entry.path)}`;
+            try {
+                if (!aladin) throw new Error('El visor Aladin no está disponible.');
+                aladin.displayImage(productUrl, { name: entry.name });
+                setActiveLayer('layer-fits');
+                if (byId('info-epoch-label')) byId('info-epoch-label').textContent = entry.name;
+                if (byId('hud-survey')) byId('hud-survey').textContent = 'PRODUCTO FITS OFICIAL IRSA';
+                if (status) status.textContent = `Solicitada la carga de ${entry.name}. Si el FITS no es compatible con Aladin, revisa la consola y el estado de red.`;
+            } catch (error) {
+                if (status) status.textContent = `No se pudo abrir el FITS: ${error.message}`;
+            }
+        });
+        container.appendChild(button);
+    });
 }
 
 function updateSkyPosition() {

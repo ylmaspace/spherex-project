@@ -10,7 +10,6 @@
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Exo+2:wght@300;400;500;600;700&family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
-    <link rel="stylesheet" href="https://aladin.cds.unistra.fr/AladinLite/api/v3/latest/aladin.min.css">
     <link rel="stylesheet" href="styles.css">
     <link rel="stylesheet" href="multifits.css">
 </head>
@@ -30,11 +29,21 @@
             <p>Carga varias observaciones FITS, sitúalas sobre el cielo mediante sus WCS y compáralas en esfera, Blink o pantalla dividida.</p>
         </section>
 
+        <section class="multi-url-import" aria-labelledby="multi-url-title">
+            <div><span class="multi-directory-kicker">IMPORTACIÓN DIRECTA · IRSA IBE</span><h2 id="multi-url-title">AÑADIR UN FITS DESDE URL</h2>
+            <p>Pega el enlace directo a un FITS oficial. El servidor lo descargará, lo procesará y lo añadirá a la esfera.</p></div>
+            <div class="multi-directory-controls">
+                <input id="multi-single-url" type="url" inputmode="url" placeholder="https://irsa.ipac.caltech.edu/ibe/data/spherex/…/archivo.fits">
+                <button id="multi-single-url-import" class="ylma-btn primary-gold" type="button">IMPORTAR URL</button>
+            </div>
+            <div id="multi-single-url-status" class="multi-directory-tools" role="status" aria-live="polite">Admite FITS y FITS comprimidos GZIP · máximo 120 MB.</div>
+        </section>
+
         <section class="multi-directory-import" aria-labelledby="multi-directory-title">
             <div class="multi-directory-heading">
                 <div><span class="multi-directory-kicker">IMPORTACIÓN REMOTA · IRSA IBE</span><h2 id="multi-directory-title">CARGA MASIVA DESDE DIRECTORIO</h2>
                 <p>Pega una carpeta SPHEREx. El sistema localizará automáticamente sus FITS; podrás importar todos o seleccionar solo algunos.</p></div>
-                <span class="multi-directory-limit">Hasta 16 por lote · 120 MB por FITS</span>
+                <span class="multi-directory-limit">Paquetes de 4 FITS · 120 MB por archivo</span>
             </div>
             <label for="multi-directory-url">URL DEL DIRECTORIO IRSA</label>
             <div class="multi-directory-controls">
@@ -53,10 +62,10 @@
             <div class="multi-upload">
                 <label for="multi-fits-input">ARCHIVOS FITS · SELECCIÓN MÚLTIPLE</label>
                 <div class="multi-upload-row">
-                    <input id="multi-fits-input" type="file" accept=".fits,.fit,.fts,application/fits" multiple>
+                    <input id="multi-fits-input" type="file" accept=".fits,.fit,.fts,.fits.gz,.fit.gz,.fts.gz,application/fits" multiple>
                     <button id="multi-load-btn" class="ylma-btn primary-gold" type="button">CARGAR IMÁGENES</button>
                 </div>
-                <small>Hasta 16 archivos por lote · 120 MB por archivo · 600 MB por lote · carga secuencial</small>
+                <small>Paquetes automáticos de 4 FITS · 120 MB por archivo · 240 MB por paquete · continúa aunque falle un archivo</small>
             </div>
             <div class="multi-actions">
                 <button id="multi-sphere-btn" class="ylma-btn control-btn active" type="button">ESFERA</button>
@@ -100,7 +109,7 @@
         <footer class="multi-footer">YLMA SPACE · SPHEREx Explorer · Datos celestes en ICRS · Aladin Lite</footer>
     </main>
 
-    <script src="https://aladin.cds.unistra.fr/aladin_3.9.0-beta.js"></script>
+    <script src="https://aladin.cds.unistra.fr/AladinLite/api/v3/latest/aladin.js"></script>
     <script src="multifits.js"></script>
 </body>
 </html>

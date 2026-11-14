@@ -30,7 +30,7 @@ def test_discovers_supported_obscore_table_and_columns(monkeypatch):
     monkeypatch.setattr(service, "_tap", fake_tap)
     schema, table, columns = asyncio.run(service._discover_table())
 
-    assert (schema, table) == ("spherex", "obscore")
+    assert (schema, table) == ("spherex", "spherex.obscore")
     assert {"s_ra", "s_dec", "obs_id", "t_min"} <= columns
     assert len(calls) == 2
 

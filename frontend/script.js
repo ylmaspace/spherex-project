@@ -90,6 +90,8 @@ function setupEventListeners() {
         loadCatalog();
     });
     byId('select-fits-btn')?.addEventListener('click', () => byId('local-fits-input')?.click());
+    byId('load-fits-url-btn')?.addEventListener('click', loadFitsFromUrl);
+    byId('fits-url-input')?.addEventListener('keydown', (event) => { if (event.key === 'Enter') { event.preventDefault(); loadFitsFromUrl(); } });
     byId('compare-fits-btn')?.addEventListener('click', () => byId('compare-fits-input')?.click());
     byId('blink-compare-upload')?.addEventListener('click', () => byId('compare-fits-input')?.click());
     byId('split-compare-upload')?.addEventListener('click', () => byId('compare-fits-input')?.click());
@@ -354,6 +356,64 @@ async function uploadFitsToBackend(file, onProgress) {
         onProgress(2);
         xhr.send(form);
     });
+}
+
+async function loadFitsFromUrl() {
+    const input = byId('fits-url-input');
+    const rawUrl = String(input?.value || '').trim();
+    if (!rawUrl) {
+        setObservationStatus('Pega una URL directa de un archivo FITS de IRSA.', 'URL necesaria');
+        input?.focus();
+        return;
+    }
+    let source;
+    try {
+        source = new URL(rawUrl);
+    } catch (_) {
+        setObservationStatus('La URL no tiene un formato válido.', 'URL no válida');
+        return;
+    }
+    if (source.protocol !== 'https:' || source.hostname !== 'irsa.ipac.caltech.edu' ||
+        source.username || source.password || source.search || source.hash ||
+        !source.pathname.startsWith('/ibe/data/spherex/') || !/\\.(fits?|fts)$/i.test(source.pathname)) {
+        setObservationStatus('Solo se admiten enlaces HTTPS directos a archivos FITS del archivo SPHEREx de IRSA.', 'URL no admitida');
+        return;
+    }
+    const filename = decodeURIComponent(source.pathname.split('/').pop() || 'spherex-observation.fits');
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 8 * 60 * 1000);
+    try {
+        showFitsProgress('RECUPERANDO FITS DESDE IRSA', filename, 5);
+        setObservationStatus('Solicitando el archivo directamente a IRSA…', 'Descarga remota');
+        const proxyUrl = '/api/product?' + new URLSearchParams({ url: source.href }).toString();
+        const response = await fetch(proxyUrl, { cache: 'no-store', signal: controller.signal });
+        if (!response.ok) {
+            let detail = 'IRSA respondió HTTP ' + response.status + '.';
+            try { const payload = await response.json(); if (payload.detail) detail = payload.detail; } catch (_) {}
+            throw new Error(detail);
+        }
+        const declaredSize = Number(response.headers.get('content-length') || 0);
+        if (declaredSize > 120 * 1024 * 1024) throw new Error('El FITS supera el límite de 120 MB.');
+        showFitsProgress('DESCARGANDO FITS DESDE IRSA', filename, 45);
+        const blob = await response.blob();
+        if (!blob.size) throw new Error('IRSA devolvió un archivo vacío.');
+        if (blob.size > 120 * 1024 * 1024) throw new Error('El FITS supera el límite de 120 MB.');
+        if (blob.type.includes('text/html')) throw new Error('IRSA devolvió una página web en lugar de un FITS.');
+        showFitsProgress('PROCESANDO FITS REMOTO', filename + ' · ' + (blob.size / 1048576).toFixed(1) + ' MB', 78);
+        const file = new File([blob], filename, { type: 'application/fits', lastModified: Date.now() });
+        const loaded = await loadLocalFits(file);
+        if (loaded) {
+            setObservationStatus('FITS remoto incorporado correctamente: ' + filename, (blob.size / 1048576).toFixed(1) + ' MB · IRSA');
+            if (input) input.value = source.href;
+        }
+    } catch (error) {
+        hideFitsProgress();
+        console.error('Remote FITS import failed', error);
+        const message = error.name === 'AbortError' ? 'La descarga desde IRSA superó los 8 minutos y se canceló.' : error.message;
+        setObservationStatus('No se pudo incorporar el FITS desde la URL: ' + message, 'Error de carga remota');
+    } finally {
+        clearTimeout(timeout);
+    }
 }
 
 async function loadComparisonFits(file) {

@@ -4,7 +4,7 @@ import numpy as np
 import pytest
 from astropy.io import fits
 
-from backend.services.fits_processor import FITSProcessingError, get_display_path, process_fits_upload
+from backend.services.fits_processor import FITSProcessingError, get_display_path, get_preview_path, process_fits_upload
 
 
 def make_fits_bytes():
@@ -36,16 +36,20 @@ def test_process_fits_extracts_image_and_celestial_coordinates(tmp_path, monkeyp
     assert result["dec"] == pytest.approx(2.5, abs=0.01)
     assert result["hdu_index"] == 0
     assert get_display_path(result["id"]).is_file()
+    assert get_preview_path(result["id"]).is_file()
 
 
-def test_rejects_fits_without_celestial_wcs(tmp_path, monkeypatch):
+def test_fits_without_celestial_wcs_still_renders_preview(tmp_path, monkeypatch):
     import io
     import backend.services.fits_processor as processor
     monkeypatch.setattr(processor, "UPLOAD_DIR", tmp_path)
     buffer = io.BytesIO()
     fits.PrimaryHDU(data=np.ones((4, 4), dtype=np.float32)).writeto(buffer)
-    with pytest.raises(FITSProcessingError, match="WCS celestial"):
-        process_fits_upload("no-wcs.fits", buffer.getvalue())
+    result = process_fits_upload("no-wcs.fits", buffer.getvalue())
+    assert result["ra"] is None
+    assert result["dec"] is None
+    assert result["width"] == 4
+    assert get_preview_path(result["id"]).is_file()
 
 
 def test_rejects_non_fits_upload():

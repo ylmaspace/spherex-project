@@ -82,18 +82,34 @@ function setupEventListeners() {
         renderObservationList();
     });
     byId('objects-close-btn')?.addEventListener('click', () => byId('objects-modal').classList.remove('active'));
-    byId('epoch-range')?.addEventListener('input', (event) => {
-        state.currentIndex = Number(event.target.value);
+    byId('epoch-index')?.addEventListener('change', (event) => {
+        const index = parseObservationIndex(event.target.value);
+        if (index === null) { event.target.value = observations.length ? String(state.currentIndex + 1) : ''; return; }
+        state.currentIndex = index;
+        event.target.value = String(index + 1);
         showSelectedObservation();
     });
-    byId('split-range-left')?.addEventListener('input', (event) => {
-        state.splitIndexLeft = Number(event.target.value);
-        updateSplitPane('left', state.splitIndexLeft);
+    byId('split-index-left')?.addEventListener('change', (event) => {
+        const index = parseObservationIndex(event.target.value);
+        if (index === null) { event.target.value = String(state.splitIndexLeft + 1); return; }
+        state.splitIndexLeft = index;
+        event.target.value = String(index + 1);
+        updateSplitPane('left', index);
     });
-    byId('split-range-right')?.addEventListener('input', (event) => {
-        state.splitIndexRight = Number(event.target.value);
-        updateSplitPane('right', state.splitIndexRight);
+    byId('split-index-right')?.addEventListener('change', (event) => {
+        const index = parseObservationIndex(event.target.value);
+        if (index === null) { event.target.value = String(state.splitIndexRight + 1); return; }
+        state.splitIndexRight = index;
+        event.target.value = String(index + 1);
+        updateSplitPane('right', index);
     });
+}
+
+function parseObservationIndex(value) {
+    if (!/^\\d+$/.test(String(value).trim()) || observations.length === 0) return null;
+    const oneBased = Number(value);
+    if (!Number.isSafeInteger(oneBased) || oneBased < 1 || oneBased > observations.length) return null;
+    return oneBased - 1;
 }
 
 function setActiveLayer(id) {
@@ -177,23 +193,25 @@ function updateSkyPosition() {
 }
 
 function updateObservationControls() {
-    const range = byId('epoch-range');
-    if (range) {
-        range.min = '0';
-        range.max = String(Math.max(0, observations.length - 1));
-        range.value = String(Math.min(state.currentIndex, Math.max(0, observations.length - 1)));
-        range.disabled = observations.length < 2;
+    const max = observations.length;
+    const main = byId('epoch-index');
+    if (main) {
+        main.value = max ? String(Math.min(state.currentIndex + 1, max)) : '';
+        main.placeholder = max ? `1–${max}` : 'Sin observaciones';
+        main.disabled = max === 0;
+        main.setAttribute('aria-label', max ? `Número de observación, de 1 a ${max}` : 'No hay observaciones');
     }
-    ['split-range-left', 'split-range-right'].forEach((id) => {
-        const slider = byId(id);
-        if (!slider) return;
-        slider.min = '0'; slider.max = String(Math.max(0, observations.length - 1));
-        slider.disabled = observations.length === 0;
+    [['split-index-left', state.splitIndexLeft], ['split-index-right', state.splitIndexRight]].forEach(([id, index]) => {
+        const input = byId(id);
+        if (!input) return;
+        input.value = max ? String(Math.min(Number(index) + 1, max)) : '';
+        input.placeholder = max ? `1–${max}` : 'Sin datos';
+        input.disabled = max === 0;
     });
 }
 
 function observationLabel(item) {
-    return item.obs_id || item.obs_publisher_did || item.target_name || `Observación ${state.currentIndex + 1}`;
+    return item.obs_id || item.obs_publisher_did || item.target_name || 'Identificador no disponible';
 }
 
 function observationDate(item) {
@@ -253,7 +271,7 @@ function renderObservationList(message = '') {
         card.textContent = `${observationLabel(item)} — ${observationDate(item)} — RA ${item.s_ra ?? '—'}, Dec ${item.s_dec ?? '—'}`;
         card.addEventListener('click', () => {
             state.currentIndex = index;
-            if (byId('epoch-range')) byId('epoch-range').value = String(index);
+            if (byId('epoch-index')) byId('epoch-index').value = String(index + 1);
             byId('objects-modal').classList.remove('active');
             showSelectedObservation();
         });
@@ -336,7 +354,7 @@ function toggleBlink() {
     let flip = false;
     const blinkOnce = () => {
         flip = !flip;
-        const index = Number((flip ? first : second)?.value ?? 0);
+        const index = Number((flip ? first : second)?.value ?? 1) - 1;
         const item = observations[index];
         const label = byId('blink-status-label');
         if (label && item) label.textContent = `${flip ? 'ÉPOCA 1' : 'ÉPOCA 2'}: ${observationLabel(item)} — ${observationDate(item)}`;

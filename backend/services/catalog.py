@@ -193,7 +193,15 @@ class IRSAFileCatalog:
 
     async def stream_fits(self, path: str, range_header: str | None = None):
         normalized = self.validate_fits_path(path)
-        url = IBE_LEVEL2_ROOT + quote(normalized, safe="/")
+        # A product is streamable only if its exact link was returned by the
+        # official listing for its parent directory; never synthesize FITS URLs.
+        parent, _, filename = normalized.rpartition("/")
+        entries = await self.list_directory(parent)
+        listed = next((entry for entry in entries
+                       if entry.kind == "fits" and entry.path == normalized), None)
+        if listed is None:
+            raise ValueError("The requested FITS product is not present in the official IRSA directory listing")
+        url = listed.url
         headers = {"Range": range_header} if range_header and re.fullmatch(r"bytes=\d*-\d*", range_header) else {}
         client = httpx.AsyncClient(timeout=self.timeout, follow_redirects=True)
         try:

@@ -82,6 +82,7 @@ def process_fits_upload(filename: str, content: bytes) -> dict[str, Any]:
                 pixel_scale_arcsec = float(np.mean(scales))
             except Exception:
                 pixel_scale_arcsec = None
+            original_path.unlink(missing_ok=True)
             return {
                 "id": upload_id,
                 "filename": Path(filename).name[:180],

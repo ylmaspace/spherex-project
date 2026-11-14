@@ -578,7 +578,7 @@ async function loadCatalog() {
         const response = await fetch('/api/catalog?' + params);
         const payload = await response.json();
         if (!response.ok) throw new Error(payload.detail || 'Error HTTP ' + response.status);
-        catalogEntries = [...(payload.directories || []), ...(payload.observations || [])];
+        catalogEntries = [...(payload.directories || []), ...(payload.files || payload.observations || [])];
         if (status) status.textContent = catalogEntries.length + ' elemento(s) en ' + (payload.path || 'raíz SPHEREx') + ' · Los FITS se descargan desde IRSA.';
         renderCatalogEntries(catalogEntries);
     } catch (error) {
@@ -620,7 +620,7 @@ function renderCatalogEntries(entries) {
                 await loadCatalog();
             });
             container.appendChild(button);
-        } else if (entry.kind === 'fits' || /\.(fits?|fts)(\.gz)?$/i.test(entry.name)) {
+        } else {
             const link = document.createElement('a');
             link.className = 'catalog-entry catalog-download-entry';
             link.href = entry.url;

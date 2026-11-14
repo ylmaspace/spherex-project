@@ -12,13 +12,11 @@
   "icons": [
     {
       "src": "https://i.postimg.cc/bvD3yLfH/Sphere-X-Explorer.png",
-      "sizes": "192x192",
       "type": "image/png",
       "purpose": "any"
     },
     {
       "src": "https://i.postimg.cc/bvD3yLfH/Sphere-X-Explorer.png",
-      "sizes": "512x512",
       "type": "image/png",
       "purpose": "any"
     }

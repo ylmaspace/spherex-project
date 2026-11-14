@@ -379,7 +379,7 @@ async function loadFitsFromUrl() {
         setObservationStatus('Solo se admiten enlaces HTTPS directos a archivos FITS del archivo SPHEREx de IRSA.', 'URL no admitida');
         return;
     }
-    const filename = decodeURIComponent(source.pathname.split('/').pop() || 'spherex-observation.fits');
+    const filename = source.pathname.split('/').pop() || 'spherex-observation.fits';
     const controller = new AbortController();
     const timeout = setTimeout(() => controller.abort(), 8 * 60 * 1000);
     try {

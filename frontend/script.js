@@ -264,7 +264,7 @@ function renderSavedSkyMap() {
         const title = document.createElement('strong');
         title.textContent = record.filename;
         const coords = document.createElement('span');
-        coords.textContent = Number.isFinite(Number(record.ra)) && Number.isFinite(Number(record.dec)) ? `RA ${Number(record.ra).toFixed(5)}° · Dec ${Number(record.dec).toFixed(5)}°` : 'WCS no incluido';
+        coords.textContent = record.ra !== null && record.dec !== null && Number.isFinite(Number(record.ra)) && Number.isFinite(Number(record.dec)) ? `RA ${Number(record.ra).toFixed(5)}° · Dec ${Number(record.dec).toFixed(5)}°` : 'WCS no incluido';
         open.append(title, coords);
         open.addEventListener('click', () => {
             if (record.file) loadLocalFits(record.file, record.id);
@@ -305,7 +305,7 @@ function rebuildSkyMarkers() {
         try { skyMarkerLayer.remove(source); } catch (_) {}
     });
     skyMarkerSources = [];
-    savedSkyRecords.filter((record) => Number.isFinite(Number(record.ra)) && Number.isFinite(Number(record.dec))).forEach((record) => {
+    savedSkyRecords.filter((record) => record.ra !== null && record.dec !== null && Number.isFinite(Number(record.ra)) && Number.isFinite(Number(record.dec))).forEach((record) => {
         const marker = A.marker(Number(record.ra), Number(record.dec), {
             popupTitle: String(record.filename).slice(0, 150),
             popupDesc: `RA: ${Number(record.ra).toFixed(6)}°<br>Dec: ${Number(record.dec).toFixed(6)}°<br>HDU: ${Number(record.hdu_index)}`
@@ -338,7 +338,7 @@ async function uploadFitsToBackend(file, onProgress) {
 
 function updateSkyCoordinates(result) {
     const ra = Number(result.ra), dec = Number(result.dec);
-    if (!Number.isFinite(ra) || !Number.isFinite(dec)) {
+    if (result.ra === null || result.ra === undefined || result.dec === null || result.dec === undefined || !Number.isFinite(ra) || !Number.isFinite(dec)) {
         if (byId('info-radec')) byId('info-radec').textContent = 'WCS no disponible en este FITS';
         return false;
     }
@@ -397,8 +397,8 @@ async function loadLocalFits(file, existingRecordId = null) {
         const localId = existingRecordId || (crypto.randomUUID ? crypto.randomUUID() : 'fits-' + Date.now());
         const record = {
             id: localId, filename: name, file,
-            ra: Number.isFinite(Number(result.ra)) ? Number(result.ra) : null,
-            dec: Number.isFinite(Number(result.dec)) ? Number(result.dec) : null,
+            ra: result.ra !== null && result.ra !== undefined && Number.isFinite(Number(result.ra)) ? Number(result.ra) : null,
+            dec: result.dec !== null && result.dec !== undefined && Number.isFinite(Number(result.dec)) ? Number(result.dec) : null,
             width: result.width, height: result.height,
             hdu_index: result.hdu_index, hdu_count: result.hdu_count,
             pixel_scale_arcsec: result.pixel_scale_arcsec, size_bytes: file.size,

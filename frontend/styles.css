@@ -790,3 +790,13 @@ body {
 .catalog-download-entry{display:block;text-decoration:none;color:var(--ylma-gold);border:1px solid rgba(255,183,0,.25);padding:9px 10px;font-size:.72rem;overflow-wrap:anywhere}
 .catalog-download-entry:hover{background:rgba(255,183,0,.1);border-color:var(--ylma-gold)}
 .catalog-entry{width:100%;text-align:left}
+
+/* Comparación de FITS locales: parpadeo y vista dividida */
+.compare-upload-row{display:flex;align-items:center;gap:12px;flex-wrap:wrap;width:100%;justify-content:center}
+.compare-upload-row span{font-size:.72rem;color:var(--text-muted)}
+#blink-local-image{max-width:100%;max-height:100%;object-fit:contain}
+.split-local-container{position:absolute;inset:0;z-index:9;grid-template-columns:1fr 1fr;background:#020405;min-height:0}
+.split-local-pane{position:relative;display:flex;align-items:center;justify-content:center;overflow:hidden;border-right:1px solid rgba(255,187,0,.35);background:#020405}
+.split-local-pane img{max-width:100%;max-height:100%;object-fit:contain}
+.split-local-pane span{position:absolute;top:10px;left:10px;padding:6px 9px;background:rgba(0,0,0,.8);color:var(--ylma-gold);font-size:.72rem;overflow-wrap:anywhere}
+@media(max-width:700px){.split-local-container{grid-template-columns:1fr 1fr}.split-local-pane span{font-size:.58rem;max-width:90%}}

@@ -188,7 +188,7 @@ async function loadRemoteObservationFits(item) {
     }
     const token = ++fitsLoadToken;
     const label = observationLabel(item);
-    const proxyUrl = `/api/product?${new URLSearchParams({ url: sourceUrl })}`;
+    const proxyUrl = productProxyUrl(item);
     setObservationStatus(`Descargando y decodificando producto SPHEREx: ${label}…`, 'Cargando FITS');
     try {
         aladin.displayFITS(
@@ -393,8 +393,15 @@ function observationUrl(item) {
     if (typeof value !== 'string') return null;
     try {
         const url = new URL(value);
-        return url.protocol === 'https:' && url.hostname === 'irsa.ipac.caltech.edu' ? url.href : null;
+        return url.protocol === 'https:' && url.hostname === 'irsa.ipac.caltech.edu' &&
+            url.pathname.startsWith('/ibe/data/spherex/') && /\\.(fits?|fts)$/i.test(url.pathname)
+            ? url.href : null;
     } catch { return null; }
+}
+
+function productProxyUrl(item) {
+    const url = observationUrl(item);
+    return url ? `/api/product?${new URLSearchParams({ url })}` : null;
 }
 
 function showSelectedObservation() {
@@ -492,10 +499,10 @@ function updateSplitPane(side, index) {
     if (!viewer) return;
     viewer.gotoRaDec(state.currentRA, state.currentDec);
     viewer.setFov(state.currentRadius);
-    const url = observationUrl(item);
-    if (url) {
-        try { viewer.displayImage(url, { name: observationLabel(item) }); }
-        catch (error) { console.warn('Unable to display IRSA product in Aladin', error); }
+    const proxyUrl = productProxyUrl(item);
+    if (proxyUrl && typeof viewer.displayFITS === 'function') {
+        try { viewer.displayFITS(proxyUrl, { name: observationLabel(item) }); }
+        catch (error) { console.warn('Unable to decode IRSA FITS in split view', error); }
     } else viewer.setImageSurvey('P/DSS2/color');
 }
 
@@ -529,10 +536,10 @@ function toggleBlink() {
         const item = observations[index];
         const label = byId('blink-status-label');
         if (label && item) label.textContent = `${flip ? 'ÉPOCA 1' : 'ÉPOCA 2'}: ${observationLabel(item)} — ${observationDate(item)}`;
-        const url = item && observationUrl(item);
-        if (url && aladin) {
-            try { aladin.displayImage(url, { name: observationLabel(item) }); }
-            catch (error) { console.warn('Blink product display failed', error); }
+        const proxyUrl = item && productProxyUrl(item);
+        if (proxyUrl && aladin && typeof aladin.displayFITS === 'function') {
+            try { aladin.displayFITS(proxyUrl, { name: observationLabel(item) }); }
+            catch (error) { console.warn('Blink FITS decoding failed', error); }
         }
     };
     blinkOnce();

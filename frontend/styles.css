@@ -783,3 +783,10 @@ body {
 .fits-local-viewport:active{cursor:grabbing}
 .fits-local-viewport img{max-width:100%;max-height:100%;object-fit:contain;transform-origin:center center;user-select:none;-webkit-user-drag:none}
 .fits-local-footer{padding:7px 12px;color:#89939d;font-size:.62rem;letter-spacing:.06em;border-top:1px solid rgba(255,187,0,.2)}
+
+.catalog-actions{display:grid;grid-template-columns:auto 1fr;gap:8px;align-items:center;margin:8px 0}
+.catalog-up-btn{padding:9px 10px;font-size:.68rem;white-space:nowrap}
+.catalog-search-btn{width:100%;margin:0}
+.catalog-download-entry{display:block;text-decoration:none;color:var(--ylma-gold);border:1px solid rgba(255,183,0,.25);padding:9px 10px;font-size:.72rem;overflow-wrap:anywhere}
+.catalog-download-entry:hover{background:rgba(255,183,0,.1);border-color:var(--ylma-gold)}
+.catalog-entry{width:100%;text-align:left}

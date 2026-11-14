@@ -87,3 +87,11 @@ body.multi-fits-page{display:block!important;position:static!important;height:au
 .multi-stack-warning{padding:10px 12px!important;border-left:3px solid #ffbb00;background:rgba(255,187,0,.07);color:#ffd978!important;font-size:.68rem!important}
 .multi-stack-warning strong{color:#ffbb00}
 @media(max-width:760px){.multi-stack-import .multi-directory-controls{grid-template-columns:1fr}}
+
+
+/* Embedded SPHEREx identity: one Base64 asset reused in the header and hero. */
+.multi-brand-mark{display:block;flex:0 0 46px;width:46px;height:46px;background-image:var(--spherex-logo);background-size:contain;background-position:center;background-repeat:no-repeat}
+.multi-hero-logo{width:clamp(150px,20vw,250px);aspect-ratio:1/1;margin:0 auto 20px;background-image:var(--spherex-logo);background-size:contain;background-position:center;background-repeat:no-repeat;filter:drop-shadow(0 0 24px rgba(255,187,0,.18))}
+.multi-intro{text-align:center;padding:4px 16px 12px}
+.multi-intro p{margin:0 auto}
+@media(max-width:720px){.multi-brand-mark{flex-basis:38px;width:38px;height:38px}.multi-hero-logo{width:clamp(138px,42vw,190px);margin-bottom:16px}.multi-intro{padding-inline:4px}}

@@ -19,7 +19,7 @@ from backend.services.catalog import CatalogError, CatalogProductNotFoundError, 
 from backend.services.questions import QuestionsService
 from backend.services.spherex import SPHERExService
 from backend.services.statistics import StatisticsService
-from backend.services.fits_processor import FITSProcessingError, MAX_UPLOAD_BYTES, get_display_path, process_fits_upload
+from backend.services.fits_processor import FITSProcessingError, MAX_UPLOAD_BYTES, get_display_path, get_preview_path, process_fits_upload
 
 logging.basicConfig(level=os.getenv("LOG_LEVEL", "INFO").upper())
 logger = logging.getLogger(__name__)
@@ -138,6 +138,17 @@ async def upload_local_fits(file: UploadFile = File(...)):
         return result
     except FITSProcessingError as exc:
         raise HTTPException(status_code=422, detail=str(exc)) from exc
+
+
+@app.get("/api/fits/preview/{upload_id}")
+def get_local_fits_preview(upload_id: str):
+    try:
+        path = get_preview_path(upload_id)
+    except FITSProcessingError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    except FileNotFoundError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    return FileResponse(path, media_type="image/png", filename=f"{upload_id}-preview.png")
 
 
 @app.get("/api/fits/local/{upload_id}")

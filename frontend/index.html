@@ -1,223 +1,124 @@
 <!DOCTYPE html>
 <html lang="es">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, height=device-height, initial-scale=1.0, user-scalable=no">
-    <title>YLMA SPHEREx Explorer | Aladin Lite Engine</title>
-    <link rel="preconnect" href="https://fonts.googleapis.com">
-    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link href="https://fonts.googleapis.com/css2?family=Exo+2:wght@300;400;500;600;700&family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
-    
-    <!-- Aladin Lite CSS -->
-    <link rel="stylesheet" href="https://aladin.cds.unistra.fr/AladinLite/api/v3/latest/aladin.min.css" />
-    
-    <link rel="stylesheet" href="styles.css">
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="description" content="Explorador de datos SPHEREx con Aladin Lite">
+  <title>YLMA SPHEREx Explorer | Aladin Lite</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Exo+2:wght@300;400;500;600;700&family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="styles.css">
 </head>
 <body>
+  <main id="landing-view" class="view-container active">
+    <div class="landing-bg"></div>
+    <section class="landing-content">
+      <div class="brand-badge">YLMA SPACE</div>
+      <h1 class="landing-title">SPHEREx &amp; ALADIN LITE</h1>
+      <p class="landing-subtitle">Explora el cielo y carga imágenes FITS remotas por URL.</p>
+      <button id="explore-btn" class="ylma-btn primary-gold">LANZAR EXPLORADOR</button>
+    </section>
+  </main>
 
-    <!-- LANDING VIEW -->
-    <div id="landing-view" class="view-container active">
-        <div class="landing-bg"></div>
-        <div class="landing-content">
-            <div class="brand-badge">YLMA SPACE</div>
-            <h1 class="landing-title">SPHEREx & ALADIN LITE</h1>
-            <p class="landing-subtitle">Exploración temporal, vista dividida y comparación parpadeante (Blink).</p>
-            
-            <div class="landing-cta-container">
-                <button id="explore-btn" class="ylma-btn primary-gold">LANZAR EXPLORADOR</button>
-            </div>
+  <main id="explorer-view" class="view-container">
+    <header class="explorer-header">
+      <div class="header-left">
+        <button class="brand-logo" id="back-home" type="button">YLMA SPACE</button>
+        <span class="header-divider"></span>
+        <span class="header-subtitle">SPHEREx · ALADIN LITE</span>
+      </div>
+      <div class="header-center">
+        <span class="user-badge" id="user-session-badge">YLMA-USER</span>
+        <span class="score-display" id="header-status-text">ALADIN LITE</span>
+      </div>
+      <button id="nav-objects-btn" class="ylma-btn outline" type="button">OBJETOS VISIBLES</button>
+    </header>
+
+    <section class="search-bar-section">
+      <form id="search-form" class="search-form">
+        <div class="input-group"><label for="input-ra">RA (°)</label><input type="number" step="0.0001" id="input-ra" value="150.1" required></div>
+        <div class="input-group"><label for="input-dec">Dec (°)</label><input type="number" step="0.0001" id="input-dec" value="2.2" required></div>
+        <div class="input-group"><label for="input-radius">FOV (°)</label><input type="number" step="0.01" min="0.01" id="input-radius" value="10" required></div>
+        <button type="submit" class="ylma-btn primary-gold">IR A COORDENADAS</button>
+      </form>
+      <form id="fits-url-form" class="fits-url-form">
+        <label class="sr-only" for="fits-url-input">URL directa del archivo FITS</label>
+        <input id="fits-url-input" type="url" placeholder="https://…/imagen.fits" aria-label="URL directa del archivo FITS">
+        <button class="ylma-btn primary-gold" type="submit">CARGAR FITS URL</button>
+      </form>
+    </section>
+
+    <section class="workspace-grid">
+      <div class="visor-container">
+        <div class="visor-toolbar">
+          <span class="visor-mode-title" id="current-mode-label">ALADIN LITE SKY ATLAS</span>
+          <div class="visor-controls-group">
+            <button class="ylma-btn control-btn active" id="layer-real" type="button">DSS / VIZIER</button>
+            <button class="ylma-btn control-btn" id="layer-fits" type="button">FITS URL</button>
+            <button class="ylma-btn control-btn" id="btn-split" type="button" aria-pressed="false">VISTA DIVIDIDA</button>
+            <button class="ylma-btn control-btn" id="btn-blink" type="button">BLINK FITS</button>
+            <button class="ylma-btn control-btn" id="btn-fs" type="button">PANTALLA COMPLETA</button>
+          </div>
         </div>
-    </div>
+        <div class="visor-stage" id="visor-stage">
+          <div class="loading-overlay" id="loading-overlay" role="status" aria-live="polite"><div class="spinner"></div><span class="loading-text" id="loading-text">INICIALIZANDO ALADIN LITE…</span></div>
+          <div id="aladin-lite-div" class="aladin-map"></div>
+          <div id="split-view-container" class="split-view-container" hidden>
+            <section class="split-pane">
+              <div id="aladin-left-div" class="split-map"></div>
+              <div class="split-url-controls"><label for="split-url-left">FITS A</label><input id="split-url-left" type="url" placeholder="URL directa del FITS A"><button id="load-split-left" class="ylma-btn control-btn" type="button">CARGAR</button></div>
+            </section>
+            <section class="split-pane">
+              <div id="aladin-right-div" class="split-map"></div>
+              <div class="split-url-controls"><label for="split-url-right">FITS B</label><input id="split-url-right" type="url" placeholder="URL directa del FITS B"><button id="load-split-right" class="ylma-btn control-btn" type="button">CARGAR</button></div>
+            </section>
+          </div>
+          <div class="visor-hud-coords"><span id="hud-coords">RA: 150.1000 | Dec: +02.2000</span><span id="hud-survey">SURVEY: DSS2/color</span></div>
+        </div>
+      </div>
 
-    <!-- EXPLORER VIEW -->
-    <div id="explorer-view" class="view-container">
-        <!-- HEADER -->
-        <header class="explorer-header">
-            <div class="header-left">
-                <div class="brand-logo" id="back-home">YLMA SPACE</div>
-                <div class="header-divider"></div>
-                <div class="header-subtitle">SPHEREx IBE CORE v2.6</div>
-            </div>
-            
-            <div class="header-center">
-                <div class="user-badge" id="user-session-badge">YLMA-USER</div>
-                <div class="score-display">
-                    <span id="header-status-text">BACKEND CONECTADO</span>
-                </div>
-            </div>
-
-            <div class="header-right">
-                <button id="nav-objects-btn" class="ylma-btn outline">OBJETOS VISIBLES</button>
-            </div>
-        </header>
-
-        <!-- SEARCH BAR -->
-        <section class="search-bar-section">
-            <form id="search-form" class="search-form">
-                <div class="input-group">
-                    <label for="input-ra">RA (Asc. Recta)</label>
-                    <input type="number" step="0.0001" id="input-ra" value="150.1" required>
-                </div>
-                <div class="input-group">
-                    <label for="input-dec">Dec (Declinación)</label>
-                    <input type="number" step="0.0001" id="input-dec" value="2.2" required>
-                </div>
-                <div class="input-group">
-                    <label for="input-radius">FOV / Zoom (°)</label>
-                    <input type="number" step="0.01" id="input-radius" value="10" required>
-                </div>
-                <button type="submit" id="search-btn" class="ylma-btn primary-gold">CONSULTAR IBE</button>
-            </form>
-            <div class="demo-badge-indicator" id="demo-indicator">SPLIT & BLINK ACTIVE</div>
+      <aside class="sidebar-panel">
+        <section class="panel-section">
+          <h2 class="panel-title">DATOS DE OBSERVACIÓN</h2>
+          <div class="info-grid">
+            <div class="info-row"><span class="info-key">Visor</span><span class="info-val ylma-status" id="info-status">Preparado</span></div>
+            <div class="info-row"><span class="info-key">Centro RA/Dec</span><span class="info-val" id="info-radec">150.100, +2.200</span></div>
+            <div class="info-row"><span class="info-key">FITS activo</span><span class="info-val url-value" id="info-fits-url">Ninguno</span></div>
+          </div>
         </section>
+        <section class="panel-section">
+          <h2 class="panel-title">FITS REMOTOS</h2>
+          <p class="doc-text">Introduce una URL directa a un archivo FITS accesible desde el navegador. El servidor debe permitir solicitudes CORS. No es necesario descargar el archivo manualmente.</p>
+          <a href="https://cds-astro.github.io/aladin-lite/" target="_blank" rel="noopener noreferrer" class="ylma-link">Documentación de Aladin Lite →</a>
+        </section>
+      </aside>
+    </section>
+  </main>
 
-        <!-- MAIN WORKSPACE -->
-        <div class="workspace-grid">
-            
-            <!-- LEFT VISOR AREA -->
-            <div class="visor-container">
-                <div class="visor-toolbar">
-                    <div class="visor-mode-title" id="current-mode-label">ALADIN LITE SKY ATLAS (SPHEREx QR2 LEVEL-2)</div>
-                    <div class="visor-controls-group">
-                        <button class="ylma-btn control-btn active" id="layer-real">DSS / VIZIER</button>
-                        <button class="ylma-btn control-btn" id="layer-fits">FITS IBE</button>
-                        <button class="ylma-btn control-btn" id="btn-split">VISTA DIVIDIDA</button>
-                        <button class="ylma-btn control-btn" id="btn-blink">PARPADEAR (BLINK)</button>
-                        <button class="ylma-btn control-btn" id="btn-fs">PANTALLA COMPLETA</button>
-                    </div>
-                </div>
-
-                <!-- ALADIN LITE STAGE CONTAINER -->
-                <div class="visor-stage" id="visor-stage">
-                    <div class="loading-overlay" id="loading-overlay">
-                        <div class="spinner"></div>
-                        <div class="loading-text">CARGANDO REPOSITORIO IBE...</div>
-                    </div>
-
-                    <!-- Contenedor Único -->
-                    <div id="aladin-lite-div"></div>
-
-                    <!-- Contenedor de Vista Dividida (Dual Visor con Deslizadores Independientes) -->
-                    <div id="split-view-container">
-                        <div class="split-pane">
-                            <div id="aladin-left-div" class="split-map"></div>
-                            <div class="split-hud-bar">
-                                <span id="split-left-title">ÉPOCA A: 00:00:00</span>
-                                <input type="range" id="split-range-left" min="0" max="59" value="0" step="1">
-                            </div>
-                        </div>
-                        <div class="split-pane">
-                            <div id="aladin-right-div" class="split-map"></div>
-                            <div class="split-hud-bar">
-                                <span id="split-right-title">ÉPOCA B: 00:30:00</span>
-                                <input type="range" id="split-range-right" min="0" max="59" value="30" step="1">
-                            </div>
-                        </div>
-                    </div>
-
-                    <div class="visor-hud-coords">
-                        <span id="hud-coords">RA: 150.1000 | Dec: +02.2000</span>
-                        <span id="hud-survey">SURVEY: DSS2/color</span>
-                    </div>
-
-                    <!-- CONTROL DESLIZANTE INFERIOR (Modo Normal) -->
-                    <div class="hud-timeline-bottom" id="normal-timeline">
-                        <div class="timeline-top-row">
-                            <span class="timeline-main-title" id="timeline-epoch-title">MINUTO ACTIVO: 01 SEP 2026 - 00:00:00</span>
-                            <div class="timeline-clock-display" id="hud-time-display">00:00:00</div>
-                        </div>
-                        <div class="curved-slider-container">
-                            <input type="range" id="epoch-range" min="0" max="59" value="0" step="1">
-                        </div>
-                    </div>
-                </div>
-            </div>
-
-            <!-- RIGHT PANEL: OBJECT INFO -->
-            <div class="sidebar-panel">
-                <div class="panel-section">
-                    <h3 class="panel-title">DATOS DE OBSERVACIÓN</h3>
-                    <div class="info-grid" id="object-info-grid">
-                        <div class="info-row">
-                            <span class="info-key">Estado API</span>
-                            <span class="info-val ylma-status" id="info-status">Conectado (/api)</span>
-                        </div>
-                        <div class="info-row">
-                            <span class="info-key">Coordenadas Centro</span>
-                            <span class="info-val" id="info-radec">150.100, +2.200</span>
-                        </div>
-                        <div class="info-row">
-                            <span class="info-key">Archivo FITS Activo</span>
-                            <span class="info-val" id="info-epoch-label">level2_20260901_0000_spx.fits</span>
-                        </div>
-                        <div class="info-row">
-                            <span class="info-key">Fuentes en Minuto</span>
-                            <span class="info-val" id="info-count">0 fuentes</span>
-                        </div>
-                    </div>
-                </div>
-
-                <div class="panel-section">
-                    <h3 class="panel-title">ARQUITECTURA DEL SISTEMA</h3>
-                    <p class="doc-text">
-                        Sincronización avanzada con Vista Dividida Dual e interpolación parpadeante Blink para análisis diferencial.
-                    </p>
-                    <a href="http://127.0.0.1:8000/docs" target="_blank" class="ylma-link">Abrir documentación FastAPI &rarr;</a>
-                </div>
-            </div>
-
-        </div>
+  <section id="objects-modal" class="modal-overlay" aria-hidden="true">
+    <div class="modal-box" role="dialog" aria-modal="true" aria-labelledby="objects-title">
+      <header class="modal-header"><h2 id="objects-title">OBJETOS VISIBLES</h2><button class="modal-close" id="objects-close-btn" type="button" aria-label="Cerrar">&times;</button></header>
+      <div class="modal-body" id="objects-list-container"><p>Consulta de fuentes según las coordenadas actuales.</p></div>
     </div>
+  </section>
 
-    <!-- MODAL DE OBJETOS VISIBLES -->
-    <div id="objects-modal" class="modal-overlay">
-        <div class="modal-box">
-            <div class="modal-header">
-                <h3>OBJETOS Y FUENTES EN LA UBICACIÓN Y MINUTO</h3>
-                <button class="modal-close" id="objects-close-btn">&times;</button>
-            </div>
-            <div class="modal-body" id="objects-modal-body">
-                <p style="color: #BDBDBD; font-size: 0.85rem; margin-bottom: 16px;">
-                    Resultados filtrados por coordenadas y minuto de observación exacto:
-                </p>
-                <div id="objects-list-container" style="display: flex; flex-direction: column; gap: 10px;">
-                    <!-- Rellenado por JavaScript -->
-                </div>
-            </div>
+  <section id="blink-modal" class="modal-overlay" aria-hidden="true">
+    <div class="modal-box blink-modal-box" role="dialog" aria-modal="true" aria-labelledby="blink-title">
+      <header class="modal-header"><h2 id="blink-title">COMPARADOR BLINK · FITS REMOTOS</h2><button class="modal-close" id="blink-close-btn" type="button" aria-label="Cerrar">&times;</button></header>
+      <div class="modal-body blink-body">
+        <p>Introduce dos URLs directas a FITS. El visor alternará entre ambas imágenes cargadas por Aladin Lite.</p>
+        <div class="blink-url-grid">
+          <label for="blink-fits-url-1">URL FITS A</label><input id="blink-fits-url-1" type="url" placeholder="https://…/imagen-a.fits">
+          <label for="blink-fits-url-2">URL FITS B</label><input id="blink-fits-url-2" type="url" placeholder="https://…/imagen-b.fits">
         </div>
+        <div id="blink-preview-box"><div id="blink-aladin-div" class="blink-map"></div><div id="blink-status-label" class="blink-status-label">Añade dos URLs FITS para comparar.</div></div>
+        <button id="blink-start-toggle" class="ylma-btn primary-gold" type="button">INICIAR BLINK</button>
+      </div>
     </div>
+  </section>
 
-    <!-- MODAL DE BLINK INTERACTIVO -->
-    <div id="blink-modal" class="modal-overlay">
-        <div class="modal-box" style="max-width: 700px;">
-            <div class="modal-header">
-                <h3>COMPARADOR INTERACTIVO BLINK (PARPADEO)</h3>
-                <button class="modal-close" id="blink-close-btn">&times;</button>
-            </div>
-            <div class="modal-body" style="display: flex; flex-direction: column; gap: 16px; align-items: center;">
-                <p style="color: #BDBDBD; font-size: 0.85rem; text-align: center;">
-                    Comparando la misma posición estelar alternando entre dos épocas temporales automáticamente.
-                </p>
-                <div id="blink-preview-box" style="width: 100%; height: 320px; background: #000; border: 1px solid var(--ylma-gold); position: relative; display: flex; justify-content: center; align-items: center;">
-                    <div id="blink-status-label" style="position: absolute; top: 10px; left: 10px; background: rgba(0,0,0,0.8); padding: 4px 8px; color: var(--ylma-gold); font-size: 0.75rem; font-weight: 700;">ÉPOCA A</div>
-                </div>
-                <div style="display: flex; gap: 16px; width: 100%; justify-content: space-between;">
-                    <div>
-                        <label style="font-size: 0.75rem; color: var(--text-muted);">Época 1:</label>
-                        <select id="blink-epoch-1" style="background: #111; color: #fff; border: 1px solid var(--border-subtle); padding: 6px;"></select>
-                    </div>
-                    <div>
-                        <label style="font-size: 0.75rem; color: var(--text-muted);">Época 2:</label>
-                        <select id="blink-epoch-2" style="background: #111; color: #fff; border: 1px solid var(--border-subtle); padding: 6px;"></select>
-                    </div>
-                    <button id="blink-start-toggle" class="ylma-btn primary-gold" style="padding: 6px 16px;">INICIAR BLINK</button>
-                </div>
-            </div>
-        </div>
-    </div>
-
-    <!-- Aladin Lite JS API -->
-    <script type="text/javascript" src="https://aladin.cds.unistra.fr/AladinLite/api/v3/latest/aladin.js" charset="utf-8"></script>
-    <script src="script.js"></script>
+  <script src="https://aladin.cds.unistra.fr/AladinLite/api/v3/latest/aladin.js" charset="utf-8"></script>
+  <script src="script.js"></script>
 </body>
 </html>

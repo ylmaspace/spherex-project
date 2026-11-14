@@ -2,6 +2,7 @@
 'use strict';
 const MAX_FILES = 16;
 const MAX_BYTES = 120 * 1024 * 1024;
+const MAX_BATCH_BYTES = 600 * 1024 * 1024;
 const state = { viewer: null, layers: [], blinking: false, blinkTimer: null, blinkIndex: 0, splitViewers: [], splitMode: false, previousVisibility: [] };
 const $ = (id) => document.getElementById(id);
 const setStatus = (message, progress) => {
@@ -106,6 +107,7 @@ async function loadSelectedFiles() {
     $('multi-load-btn').disabled = true;
     try {
         const viewer = await initSphere();
+        viewer.setProjection($('multi-projection').value);
         let success = 0;
         for (let index = 0; index < files.length; index++) {
             const file = files[index];

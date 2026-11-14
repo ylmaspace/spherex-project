@@ -338,49 +338,78 @@ function setProjection() {
     $('multi-view-subtitle').textContent = $('multi-projection').selectedOptions[0].textContent + ' · marco ICRS';
 }
 
+async function fetchDirectoryTree(raw, recursive = true) {
+    const queue = [{path: raw, depth: 0}];
+    const visited = new Set();
+    const files = [];
+    const MAX_DIRECTORIES = 500;
+    const MAX_FILES = 5000;
+    while (queue.length) {
+        const current = queue.shift();
+        const normalizedKey = current.path.replace(/\\/$/, '');
+        if (visited.has(normalizedKey)) continue;
+        visited.add(normalizedKey);
+        if (visited.size > MAX_DIRECTORIES) throw new Error('El directorio contiene más de 500 subdirectorios; reduce el alcance.');
+        const firstUrl = new URL('/api/catalog', window.location.origin);
+        firstUrl.searchParams.set('path', current.path);
+        firstUrl.searchParams.set('page', '1');
+        firstUrl.searchParams.set('page_size', '100');
+        const firstResponse = await fetch(firstUrl);
+        const first = await firstResponse.json();
+        if (!firstResponse.ok) throw new Error(first.detail || 'IRSA no ha podido listar ' + current.path);
+        const dirs = first.directories || [];
+        const pages = Math.min(Number(first.fits_pages) || 1, 100);
+        for (const file of (first.fits_files || first.observations || [])) {
+            files.push({...file, directory_path: current.path});
+            if (files.length >= MAX_FILES) throw new Error('Se alcanzó el límite de seguridad de 5.000 FITS por exploración.');
+        }
+        for (let page = 2; page <= pages; page++) {
+            $('multi-directory-summary').textContent = 'Leyendo ' + current.path + ' · página ' + page + '/' + pages;
+            const url = new URL('/api/catalog', window.location.origin);
+            url.searchParams.set('path', current.path); url.searchParams.set('page', String(page)); url.searchParams.set('page_size', '100');
+            const response = await fetch(url);
+            const payload = await response.json();
+            if (!response.ok) throw new Error(payload.detail || 'No se pudo leer la página ' + page + '.');
+            for (const file of (payload.fits_files || payload.observations || [])) {
+                files.push({...file, directory_path: current.path});
+                if (files.length >= MAX_FILES) throw new Error('Se alcanzó el límite de seguridad de 5.000 FITS por exploración.');
+            }
+        }
+        if (recursive && current.depth < 12) {
+            for (const dir of dirs) queue.push({path: dir.path, depth: current.depth + 1});
+        }
+    }
+    return files;
+}
+
 async function scanIRsaDirectory() {
     const raw = $('multi-directory-url').value.trim();
     if (!raw) { $('multi-directory-summary').textContent = 'Introduce la URL de una carpeta IRSA.'; return; }
     let parsed;
     try { parsed = new URL(raw); } catch (_) { $('multi-directory-summary').textContent = 'La URL no tiene un formato válido.'; return; }
     if (parsed.protocol !== 'https:' || parsed.hostname !== 'irsa.ipac.caltech.edu' ||
-        !parsed.pathname.startsWith('/ibe/data/spherex/') || parsed.search || parsed.hash) {
+        !parsed.pathname.startsWith('/ibe/data/spherex/') || parsed.search || parsed.hash || parsed.username || parsed.password) {
         $('multi-directory-summary').textContent = 'Solo se admiten directorios HTTPS oficiales de IRSA SPHEREx, sin parámetros.';
         return;
     }
     $('multi-directory-scan').disabled = true;
     $('multi-directory-import').disabled = true;
     $('multi-directory-files').replaceChildren();
-    $('multi-directory-summary').textContent = 'Consultando el índice oficial de IRSA…';
+    const recursive = $('multi-directory-recursive').checked;
+    $('multi-directory-summary').textContent = recursive ? 'Explorando el directorio y sus subdirectorios…' : 'Consultando el índice oficial de IRSA…';
     try {
-        const all = [];
-        const firstUrl = new URL('/api/catalog', window.location.origin);
-        firstUrl.searchParams.set('path', raw);
-        firstUrl.searchParams.set('page', '1');
-        firstUrl.searchParams.set('page_size', '100');
-        const firstResponse = await fetch(firstUrl);
-        const first = await firstResponse.json();
-        if (!firstResponse.ok) throw new Error(first.detail || 'IRSA no ha podido listar este directorio.');
-        const pages = Math.min(Number(first.fits_pages) || 1, 100);
-        all.push(...(first.fits_files || first.observations || []));
-        for (let page = 2; page <= pages; page++) {
-            $('multi-directory-summary').textContent = 'Leyendo directorio… página ' + page + '/' + pages;
-            const url = new URL('/api/catalog', window.location.origin);
-            url.searchParams.set('path', raw); url.searchParams.set('page', String(page)); url.searchParams.set('page_size', '100');
-            const response = await fetch(url);
-            const payload = await response.json();
-            if (!response.ok) throw new Error(payload.detail || 'No se pudo leer la página ' + page + '.');
-            all.push(...(payload.fits_files || payload.observations || []));
-        }
-        state.directoryPath = raw;
-        state.directoryFiles = all;
+        const all = await fetchDirectoryTree(parsed.href.replace(/\\/$/, ''), recursive);
+        const unique = new Map(all.map(file => [file.path, file]));
+        state.directoryPath = parsed.href.replace(/\\/$/, '');
+        state.directoryFiles = Array.from(unique.values());
+        state.importedDirectoryPaths.clear();
         renderDirectoryFiles();
-        $('multi-directory-select-all').disabled = all.length === 0;
-        $('multi-directory-select-all').checked = all.length > 0;
-        $('multi-directory-summary').textContent = all.length + ' FITS encontrados' +
-            (Number(first.fits_count ?? first.count) > all.length ? ' · índice limitado a 10.000 archivos por exploración' : '') +
-            (all.length ? ' · selecciónalos y pulsa importar' : ' · no hay FITS en esta carpeta');
-        $('multi-directory-import').disabled = all.length === 0;
+        $('multi-directory-select-all').disabled = state.directoryFiles.length === 0;
+        $('multi-directory-select-all').checked = state.directoryFiles.length > 0;
+        $('multi-directory-summary').textContent = state.directoryFiles.length + ' FITS encontrados' +
+            (recursive ? ' en el árbol completo de directorios' : ' en esta carpeta') +
+            (state.directoryFiles.length ? ' · organizados por carpeta en paquetes de 4' : ' · no hay FITS en esta carpeta');
+        $('multi-directory-import').disabled = state.directoryFiles.length === 0;
     } catch (error) {
         $('multi-directory-summary').textContent = 'Error al explorar: ' + error.message;
     } finally {
@@ -463,19 +492,27 @@ async function importDirectorySelection() {
     $('multi-directory-scan').disabled = true;
     stopBlink();
     let loaded = 0, failed = 0, finished = 0;
-    const packages = buildPackages(selected);
+    const byDirectory = new Map();
+    selected.forEach(file => {
+        const key = file.directory_path || state.directoryPath;
+        if (!byDirectory.has(key)) byDirectory.set(key, []);
+        byDirectory.get(key).push(file);
+    });
+    const packages = Array.from(byDirectory.entries()).flatMap(([directory, files]) =>
+        buildPackages(files).map(items => ({directory, items}))
+    );
     try {
         const viewer = await initSphere();
         viewer.setProjection($('multi-projection').value);
         for (let packageIndex = 0; packageIndex < packages.length; packageIndex++) {
-            const pack = packages[packageIndex];
+            const pack = packages[packageIndex].items;
             $('multi-directory-summary').textContent = 'Descargando PAQUETE ' + (packageIndex + 1) + '/' + packages.length +
                 ' · ' + pack.length + ' archivos · ' + finished + '/' + selected.length + ' completados';
             let payload;
             try {
                 const response = await fetch('/api/fits/import-directory', {
                     method: 'POST', headers: {'Content-Type':'application/json'},
-                    body: JSON.stringify({directory_path: state.directoryPath, files: pack.map(file => file.path)})
+                    body: JSON.stringify({directory_path: packages[packageIndex].directory, files: pack.map(file => file.path)})
                 });
                 payload = await response.json();
                 if (!response.ok) throw new Error(payload.detail || 'HTTP ' + response.status);
@@ -524,6 +561,59 @@ async function importDirectorySelection() {
         state.importingDirectory = false;
         $('multi-directory-scan').disabled = false;
         updateDirectorySelection();
+        $('multi-blink-btn').disabled = state.layers.length < 2;
+        $('multi-split-btn').disabled = state.layers.length < 2;
+    }
+}
+
+async function loadWholeDirectoryIntoAladin() {
+    const raw = $('multi-stack-url').value.trim();
+    let parsed;
+    try { parsed = new URL(raw); } catch (_) { $('multi-stack-status').textContent = 'Introduce una URL válida.'; return; }
+    if (parsed.protocol !== 'https:' || parsed.hostname !== 'irsa.ipac.caltech.edu' ||
+        !parsed.pathname.startsWith('/ibe/data/spherex/') || parsed.search || parsed.hash || parsed.username || parsed.password) {
+        $('multi-stack-status').textContent = 'Solo se admiten directorios oficiales HTTPS de IRSA SPHEREx.';
+        return;
+    }
+    const accepted = confirm('AVISO DE MEMORIA\\n\\nSe intentará cargar cada FITS del directorio como una capa independiente directamente en Aladin Lite. Los datos se procesarán en el navegador y pueden consumir muchísima RAM, ralentizar el equipo o bloquear/cerrar la pestaña. Para carpetas grandes, usa la importación por paquetes.\\n\\n¿Quieres continuar?');
+    if (!accepted) return;
+    const button = $('multi-stack-load');
+    button.disabled = true;
+    $('multi-stack-status').textContent = 'Explorando todos los directorios…';
+    try {
+        const files = await fetchDirectoryTree(parsed.href.replace(/\\/$/, ''), $('multi-stack-recursive').checked);
+        if (!files.length) throw new Error('No se encontraron FITS en esa carpeta.');
+        if (!confirm('Se han encontrado ' + files.length + ' FITS. Aladin intentará mantenerlos como capas del navegador. El consumo de RAM puede ser muy elevado. ¿Cargar las ' + files.length + ' capas?')) return;
+        stopBlink();
+        const viewer = await initSphere();
+        viewer.setProjection($('multi-projection').value);
+        let loaded = 0, failed = 0;
+        for (const file of files) {
+            $('multi-stack-status').textContent = 'Aladin Lite · capa ' + (loaded + failed + 1) + '/' + files.length + ' · ' + file.name;
+            try {
+                const proxyUrl = '/api/fits?path=' + encodeURIComponent(file.path);
+                const record = {filename: file.name, display_url: proxyUrl};
+                const layerId = 'ylma-aladin-stack-' + loaded + '-' + Date.now();
+                const rendered = await displayLayer(viewer, record, layerId);
+                state.layers.push({
+                    id: layerId, filename: file.name, image: rendered.image,
+                    ra: rendered.ra, dec: rendered.dec, width: null, height: null,
+                    display_url: proxyUrl, visible: true, opacity: 0.58
+                });
+                loaded++;
+                renderLayerList();
+                if (loaded === 1 && Number.isFinite(rendered.ra) && Number.isFinite(rendered.dec)) viewer.gotoRaDec(rendered.ra, rendered.dec);
+            } catch (error) {
+                failed++;
+                console.warn('Aladin direct stack failed: ' + file.path, error);
+            }
+            $('multi-stack-status').textContent = 'Aladin Lite Stack · ' + loaded + ' capas · ' + failed + ' errores · ' + files.length + ' FITS detectados';
+        }
+        setStatus('Stack directo finalizado · ' + loaded + ' capas · ' + failed + ' errores.', 100);
+    } catch (error) {
+        $('multi-stack-status').textContent = 'No se pudo cargar el directorio: ' + error.message;
+    } finally {
+        button.disabled = false;
         $('multi-blink-btn').disabled = state.layers.length < 2;
         $('multi-split-btn').disabled = state.layers.length < 2;
     }
@@ -584,6 +674,7 @@ $('multi-projection').addEventListener('change', setProjection);
 $('multi-directory-scan').addEventListener('click', scanIRsaDirectory);
 $('multi-directory-import').addEventListener('click', importDirectorySelection);
 $('multi-single-url-import').addEventListener('click', importSingleUrl);
+$('multi-stack-load').addEventListener('click', loadWholeDirectoryIntoAladin);
 $('multi-directory-select-all').addEventListener('change', () => {
     $('multi-directory-files').querySelectorAll('.multi-directory-file-select:not(:disabled)').forEach(input => { input.checked = $('multi-directory-select-all').checked; });
     updateDirectorySelection();

@@ -160,7 +160,7 @@ class IRSAService:
         rows = await self._tap(f"SELECT TOP 1 * FROM {table} WHERE {identifier} = '{escaped}'")
         if not rows:
             raise ObservationNotFoundError(f"Observation {obs_id} was not found")
-        return {"source": f"IRSA TAP {schema}.{table}", "is_demo": False, "observation": rows[0]}
+        return {"source": f"IRSA TAP {table}", "is_demo": False, "observation": rows[0]}
 
 
 # Backwards-compatible name used by older API handlers.

@@ -56,3 +56,15 @@ def test_fits_stream_requires_exact_official_listing_entry(monkeypatch):
     monkeypatch.setattr(catalog, "list_directory", empty_listing)
     with pytest.raises(CatalogProductNotFoundError):
         asyncio.run(catalog.stream_fits("2025W18_2B/not-listed.fits"))
+
+def test_normalize_official_ibe_root_url_and_nested_url():
+    assert IRSAFileCatalog.normalize_path("https://irsa.ipac.caltech.edu/ibe/data/spherex") == ""
+    assert IRSAFileCatalog.normalize_path("https://irsa.ipac.caltech.edu/ibe/data/spherex/qr3/level2/") == "qr3/level2"
+    assert IRSAFileCatalog.normalize_path("dr1/level2") == "dr1/level2"
+
+
+def test_normalize_rejects_non_official_ibe_urls():
+    with pytest.raises(ValueError):
+        IRSAFileCatalog.normalize_path("https://example.com/ibe/data/spherex/qr2")
+    with pytest.raises(ValueError):
+        IRSAFileCatalog.normalize_path("https://irsa.ipac.caltech.edu/ibe/data/spherex/../outside")

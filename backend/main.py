@@ -220,7 +220,9 @@ async def import_fits_directory(payload: dict = Body(...)):
             upstream, chunks = await catalog_service.stream_fits(relative_path)
             content = await _read_irsa_stream_limited(chunks, remaining)
             bytes_downloaded += len(content)
-            results.append(await _process_fits_content(filename, content))
+            processed = await _process_fits_content(filename, content)
+            processed["source_path"] = relative_path
+            results.append(processed)
         except (CatalogError, FITSProcessingError, ValueError) as exc:
             logger.warning("IRSA FITS package item failed: path=%s error=%s", relative_path, exc)
             errors.append({"filename": filename, "error": str(exc)})

@@ -851,3 +851,11 @@ body {
 /* Entrada al laboratorio multimagen independiente */
 #open-multifits-tool{display:inline-flex;align-items:center;justify-content:center;text-decoration:none;white-space:nowrap}
 @media(max-width:900px){#open-multifits-tool{font-size:.65rem;padding:8px 10px}}
+
+
+/* Landing shortcuts and compact scientific cursor HUD */
+.landing-cta-container{display:flex;align-items:center;justify-content:center;gap:12px;flex-wrap:wrap}
+.landing-multifits-link{display:inline-flex;align-items:center;justify-content:center;text-decoration:none}
+.visor-hud-coords{flex-wrap:wrap;max-width:calc(100% - 24px)}
+.fits-local-toolbar span{font-size:.66rem;font-variant-numeric:tabular-nums}
+@media(max-width:700px){.visor-hud-coords{right:12px;gap:6px;font-size:.62rem}.landing-cta-container{align-items:stretch}.landing-cta-container .ylma-btn{width:100%}}

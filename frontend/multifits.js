@@ -320,8 +320,8 @@ async function scanIRsaDirectory() {
         const firstResponse = await fetch(firstUrl);
         const first = await firstResponse.json();
         if (!firstResponse.ok) throw new Error(first.detail || 'IRSA no ha podido listar este directorio.');
-        const pages = Math.min(Number(first.pages) || 1, 50);
-        all.push(...(first.observations || []));
+        const pages = Math.min(Number(first.fits_pages) || 1, 50);
+        all.push(...(first.fits_files || first.observations || []));
         for (let page = 2; page <= pages; page++) {
             $('multi-directory-summary').textContent = 'Leyendo directorio… página ' + page + '/' + pages;
             const url = new URL('/api/catalog', window.location.origin);
@@ -329,7 +329,7 @@ async function scanIRsaDirectory() {
             const response = await fetch(url);
             const payload = await response.json();
             if (!response.ok) throw new Error(payload.detail || 'No se pudo leer la página ' + page + '.');
-            all.push(...(payload.observations || []));
+            all.push(...(payload.fits_files || payload.observations || []));
         }
         state.directoryPath = raw;
         state.directoryFiles = all;
@@ -337,7 +337,7 @@ async function scanIRsaDirectory() {
         $('multi-directory-select-all').disabled = all.length === 0;
         $('multi-directory-select-all').checked = all.length > 0;
         $('multi-directory-summary').textContent = all.length + ' FITS encontrados' +
-            (Number(first.count) > all.length ? ' · índice limitado a 5.000 archivos para esta exploración' : '') +
+            (Number(first.fits_count ?? first.count) > all.length ? ' · índice limitado a 5.000 archivos para esta exploración' : '') +
             (all.length ? ' · selecciónalos y pulsa importar' : ' · no hay FITS en esta carpeta');
         $('multi-directory-import').disabled = all.length === 0;
     } catch (error) {

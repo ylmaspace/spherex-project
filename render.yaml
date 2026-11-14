@@ -1,9 +1,10 @@
 services:
   - type: web
-    name: ylma-spherex-explorer
+    name: ylma-spherex-explorer-eu
     runtime: python
+    region: frankfurt
     plan: free
-    branch: deploy/render-production
+    branch: copilot/audit-repair-spherex-explorer
     buildCommand: pip install -r backend/requirements.txt
     startCommand: uvicorn backend.main:app --host 0.0.0.0 --port $PORT
     healthCheckPath: /api/health
@@ -11,7 +12,8 @@ services:
     envVars:
       - key: PYTHON_VERSION
         value: 3.11.11
-      # Configure this in the Render dashboard to use a managed PostgreSQL database.
+      # Set manually in Render to the connection URL of the existing spherex-project-database.
+      # No database resource is declared here, so this Blueprint will not create one.
       - key: DATABASE_URL
         sync: false
       - key: ALLOWED_ORIGINS

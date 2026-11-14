@@ -142,6 +142,8 @@ async function loadSelectedFiles() {
         setStatus('Carga interrumpida: ' + error.message, 0);
     } finally {
         $('multi-load-btn').disabled = false;
+        $('multi-blink-btn').disabled = state.layers.length < 2;
+        $('multi-split-btn').disabled = state.layers.length < 2;
     }
 }
 

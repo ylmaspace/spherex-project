@@ -772,3 +772,14 @@ body {
 }
 
 .fits-dropzone.fits-loaded { opacity: .08; pointer-events: none; transition: opacity .35s ease; }
+
+/* Independent FITS raster viewer: no Aladin/CDS runtime required */
+.fits-local-viewer{position:absolute;inset:0;z-index:8;display:flex;flex-direction:column;background:#020405;min-height:300px}
+.fits-local-viewer[hidden]{display:none!important}
+.fits-local-toolbar{display:flex;justify-content:space-between;align-items:center;gap:12px;padding:10px 14px;color:#ffbb00;border-bottom:1px solid rgba(255,187,0,.28);font-size:.72rem;flex-wrap:wrap}
+.fits-local-toolbar span{color:#d4d9df}
+.fits-local-toolbar button{background:#171717;color:#ffbb00;border:1px solid #806000;padding:6px 12px;cursor:pointer}
+.fits-local-viewport{flex:1;min-height:0;overflow:hidden;display:flex;align-items:center;justify-content:center;cursor:grab;touch-action:none;background:radial-gradient(ellipse at center,#101820 0%,#020405 75%)}
+.fits-local-viewport:active{cursor:grabbing}
+.fits-local-viewport img{max-width:100%;max-height:100%;object-fit:contain;transform-origin:center center;user-select:none;-webkit-user-drag:none}
+.fits-local-footer{padding:7px 12px;color:#89939d;font-size:.62rem;letter-spacing:.06em;border-top:1px solid rgba(255,187,0,.2)}

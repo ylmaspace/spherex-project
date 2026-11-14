@@ -61,6 +61,30 @@ function setupEventListeners() {
         byId('landing-view').classList.add('active');
     });
     byId('catalog-search-btn')?.addEventListener('click', loadCatalog);
+    byId('catalog-path')?.addEventListener('keydown', (event) => { if (event.key === 'Enter') loadCatalog(); });
+    byId('catalog-up-btn')?.addEventListener('click', () => {
+        const input = byId('catalog-path');
+        if (!input) return;
+        const value = input.value.trim();
+        try {
+            const url = new URL(value);
+            const root = '/ibe/data/spherex/';
+            if (url.hostname === 'irsa.ipac.caltech.edu' && url.pathname.startsWith(root)) {
+                const parts = url.pathname.slice(root.length).split('/').filter(Boolean);
+                parts.pop();
+                input.value = root + (parts.length ? parts.join('/') + '/' : '');
+            } else {
+                const parts = value.split('/').filter(Boolean);
+                parts.pop();
+                input.value = parts.join('/');
+            }
+        } catch {
+            const parts = value.replace(/\\/g, '/').split('/').filter(Boolean);
+            parts.pop();
+            input.value = parts.join('/');
+        }
+        loadCatalog();
+    });
     byId('select-fits-btn')?.addEventListener('click', () => byId('local-fits-input')?.click());
     byId('fits-drop-button')?.addEventListener('click', (event) => {
         event.stopPropagation();
@@ -240,7 +264,7 @@ function renderSavedSkyMap() {
         const title = document.createElement('strong');
         title.textContent = record.filename;
         const coords = document.createElement('span');
-        coords.textContent = `RA ${Number(record.ra).toFixed(5)}° · Dec ${Number(record.dec).toFixed(5)}°`;
+        coords.textContent = Number.isFinite(Number(record.ra)) && Number.isFinite(Number(record.dec)) ? `RA ${Number(record.ra).toFixed(5)}° · Dec ${Number(record.dec).toFixed(5)}°` : 'WCS no incluido';
         open.append(title, coords);
         open.addEventListener('click', () => {
             if (record.file) loadLocalFits(record.file, record.id);
@@ -281,7 +305,7 @@ function rebuildSkyMarkers() {
         try { skyMarkerLayer.remove(source); } catch (_) {}
     });
     skyMarkerSources = [];
-    savedSkyRecords.forEach((record) => {
+    savedSkyRecords.filter((record) => Number.isFinite(Number(record.ra)) && Number.isFinite(Number(record.dec))).forEach((record) => {
         const marker = A.marker(Number(record.ra), Number(record.dec), {
             popupTitle: String(record.filename).slice(0, 150),
             popupDesc: `RA: ${Number(record.ra).toFixed(6)}°<br>Dec: ${Number(record.dec).toFixed(6)}°<br>HDU: ${Number(record.hdu_index)}`
@@ -313,8 +337,13 @@ async function uploadFitsToBackend(file, onProgress) {
 }
 
 function updateSkyCoordinates(result) {
-    state.currentRA = Number(result.ra);
-    state.currentDec = Number(result.dec);
+    const ra = Number(result.ra), dec = Number(result.dec);
+    if (!Number.isFinite(ra) || !Number.isFinite(dec)) {
+        if (byId('info-radec')) byId('info-radec').textContent = 'WCS no disponible en este FITS';
+        return false;
+    }
+    state.currentRA = ra;
+    state.currentDec = dec;
     const widthDeg = (Number(result.pixel_scale_arcsec) || 1) * Math.max(result.width, result.height) / 3600 * 1.25;
     state.currentRadius = Math.max(0.002, Math.min(10, widthDeg));
     if (byId('input-ra')) byId('input-ra').value = state.currentRA.toFixed(6);
@@ -324,6 +353,7 @@ function updateSkyCoordinates(result) {
         `${state.currentRA.toFixed(5)}°, ${state.currentDec >= 0 ? '+' : ''}${state.currentDec.toFixed(5)}°`;
     aladin?.gotoRaDec(state.currentRA, state.currentDec);
     aladin?.setFov(state.currentRadius);
+    return true;
 }
 
 async function loadLocalFitsBatch(files) {
@@ -354,17 +384,22 @@ async function loadLocalFits(file, existingRecordId = null) {
         return;
     }
     try {
-        showFitsProgress('INCORPORANDO IMAGEN FITS', `Subiendo ${name}…`, 0);
-        setObservationStatus(`Preparando FITS: ${name}`, 'Procesando');
+        showFitsProgress('INCORPORANDO IMAGEN FITS', 'Subiendo ' + name + '…', 0);
+        setObservationStatus('Preparando FITS: ' + name, 'Procesando');
         const result = await uploadFitsToBackend(file, (percent) => {
-            showFitsProgress('SUBIENDO ARCHIVO', `${name} · ${(file.size / 1048576).toFixed(1)} MB`, percent);
+            showFitsProgress('SUBIENDO ARCHIVO', name + ' · ' + (file.size / 1048576).toFixed(1) + ' MB', percent);
         });
+        if (!result || !result.id || !result.preview_url || !Number(result.width) || !Number(result.height)) {
+            throw new Error('El servidor no devolvió una vista previa FITS válida.');
+        }
         showFitsProgress('DECODIFICANDO DATOS CIENTÍFICOS', 'Leyendo HDU, imagen y coordenadas WCS…', 84);
-        updateSkyCoordinates(result);
-        const localId = existingRecordId || (crypto.randomUUID ? crypto.randomUUID() : `fits-${Date.now()}-${Math.random().toString(16).slice(2)}`);
+        const hasWcs = updateSkyCoordinates(result);
+        const localId = existingRecordId || (crypto.randomUUID ? crypto.randomUUID() : 'fits-' + Date.now());
         const record = {
             id: localId, filename: name, file,
-            ra: result.ra, dec: result.dec, width: result.width, height: result.height,
+            ra: Number.isFinite(Number(result.ra)) ? Number(result.ra) : null,
+            dec: Number.isFinite(Number(result.dec)) ? Number(result.dec) : null,
+            width: result.width, height: result.height,
             hdu_index: result.hdu_index, hdu_count: result.hdu_count,
             pixel_scale_arcsec: result.pixel_scale_arcsec, size_bytes: file.size,
             saved_at: new Date().toISOString()
@@ -372,36 +407,52 @@ async function loadLocalFits(file, existingRecordId = null) {
         await saveSkyRecord(record);
         savedSkyRecords = await getSavedSkyRecords();
         renderSavedSkyMap();
-        rebuildSkyMarkers();
+        if (hasWcs) rebuildSkyMarkers();
 
         const token = ++fitsLoadToken;
         const image = byId('fits-local-image');
         const localViewer = byId('fits-local-viewer');
         const aladinContainer = byId('aladin-lite-div');
         if (!image || !localViewer) throw new Error('No se encuentra el visor FITS local.');
-        showFitsProgress('RENDERIZANDO IMAGEN', 'Preparando vista científica independiente…', 92);
-        image.onload = () => {
-            if (token !== fitsLoadToken) return;
-            localFitsZoom = 1; localFitsPan = { x: 0, y: 0 }; applyLocalFitsTransform();
-            byId('fits-local-title').textContent = name;
-            byId('fits-local-coords').textContent = 'RA ' + Number(result.ra).toFixed(5) + '° · Dec ' + Number(result.dec).toFixed(5) + '°';
-            localViewer.hidden = false;
-            if (aladinContainer) aladinContainer.style.display = 'none';
-            setActiveLayer('layer-fits');
-            if (byId('info-epoch-label')) byId('info-epoch-label').textContent = name;
-            if (byId('hud-survey')) byId('hud-survey').textContent = 'FITS LOCAL · WCS';
-            if (byId('timeline-epoch-title')) byId('timeline-epoch-title').textContent = name;
-            if (byId('fits-dropzone')) byId('fits-dropzone').classList.add('fits-loaded');
-            setObservationStatus('Imagen visible y guardada: ' + name, 'HDU ' + result.hdu_index + ' · ' + result.width + '×' + result.height);
-            showFitsProgress('IMAGEN INCORPORADA', 'Imagen renderizada sin depender de Aladin ni de CDS.', 100);
-            setTimeout(hideFitsProgress, 650);
-        };
-        image.onerror = () => { if (token === fitsLoadToken) { hideFitsProgress(); setObservationStatus('No se pudo cargar la vista PNG local.', ''); } };
-        image.src = result.preview_url + '?v=' + Date.now();
+        showFitsProgress('RENDERIZANDO IMAGEN', 'Descargando la previsualización procesada…', 92);
+        const previewResponse = await fetch(result.preview_url, { cache: 'no-store' });
+        if (!previewResponse.ok) throw new Error('El servidor procesó el FITS, pero la vista previa respondió HTTP ' + previewResponse.status + '.');
+        const previewBlob = await previewResponse.blob();
+        if (!previewBlob.type.includes('image/')) throw new Error('La respuesta de vista previa no es una imagen.');
+        const previewObjectUrl = URL.createObjectURL(previewBlob);
+        if (activeLocalFitsUrl) URL.revokeObjectURL(activeLocalFitsUrl);
+        activeLocalFitsUrl = previewObjectUrl;
+        image.src = previewObjectUrl;
+        if (image.decode) await image.decode();
+        else await new Promise((resolve, reject) => {
+            image.onload = resolve;
+            image.onerror = () => reject(new Error('El navegador no pudo decodificar la imagen FITS.'));
+        });
+        if (token !== fitsLoadToken) return;
+        localFitsZoom = 1;
+        localFitsPan = { x: 0, y: 0 };
+        applyLocalFitsTransform();
+        byId('fits-local-title').textContent = name;
+        byId('fits-local-coords').textContent = hasWcs
+            ? 'RA ' + Number(result.ra).toFixed(5) + '° · Dec ' + Number(result.dec).toFixed(5) + '°'
+            : 'WCS no incluido · imagen mostrada sin coordenadas celestes';
+        localViewer.hidden = false;
+        if (aladinContainer) aladinContainer.style.display = 'none';
+        setActiveLayer('layer-fits');
+        if (byId('info-epoch-label')) byId('info-epoch-label').textContent = name;
+        if (byId('hud-survey')) byId('hud-survey').textContent = hasWcs ? 'FITS LOCAL · WCS' : 'FITS LOCAL · SIN WCS';
+        if (byId('timeline-epoch-title')) byId('timeline-epoch-title').textContent = name;
+        if (byId('fits-dropzone')) byId('fits-dropzone').classList.add('fits-loaded');
+        setObservationStatus(
+            'Imagen FITS renderizada y guardada: ' + name,
+            'HDU ' + result.hdu_index + ' · ' + result.width + '×' + result.height + (hasWcs ? '' : ' · sin WCS')
+        );
+        showFitsProgress('IMAGEN INCORPORADA', 'La imagen ya está visible en el visor local.', 100);
+        setTimeout(hideFitsProgress, 650);
     } catch (error) {
         hideFitsProgress();
         console.error('FITS upload failed', error);
-        setObservationStatus(`No se pudo incorporar el FITS: ${error.message}`, 'Error de carga');
+        setObservationStatus('No se pudo incorporar el FITS: ' + error.message, 'Error de carga');
     }
 }
 
@@ -518,22 +569,30 @@ async function searchObservations() {
 
 async function loadCatalog() {
     const path = byId('catalog-path')?.value.trim() || '';
-    const query = byId('catalog-query')?.value.trim() || '';
     const status = byId('catalog-status');
     const results = byId('catalog-results');
-    if (status) status.textContent = 'Consultando el listado oficial de IRSA…';
+    if (status) status.textContent = 'Conectando con el directorio oficial de SPHEREx en IRSA…';
     if (results) results.replaceChildren();
-    const params = new URLSearchParams({ path, query, page: '1', page_size: '40' });
+    const params = new URLSearchParams({ path, page: '1', page_size: '100' });
     try {
-        const response = await fetch(`/api/catalog?${params}`);
+        const response = await fetch('/api/catalog?' + params);
         const payload = await response.json();
-        if (!response.ok) throw new Error(payload.detail || `Error HTTP ${response.status}`);
+        if (!response.ok) throw new Error(payload.detail || 'Error HTTP ' + response.status);
         catalogEntries = [...(payload.directories || []), ...(payload.observations || [])];
-        if (status) status.textContent = `${payload.count} producto(s) FITS en este directorio · ${payload.path || 'raíz IRSA'}`;
+        if (status) status.textContent = catalogEntries.length + ' elemento(s) en ' + (payload.path || 'raíz SPHEREx') + ' · Los FITS se descargan desde IRSA.';
         renderCatalogEntries(catalogEntries);
     } catch (error) {
         catalogEntries = [];
-        if (status) status.textContent = `No se pudo consultar IRSA: ${error.message}`;
+        if (status) status.textContent = 'No se pudo abrir este directorio: ' + error.message + '. Comprueba la URL o inténtalo más tarde.';
+        if (results) {
+            const link = document.createElement('a');
+            link.href = 'https://irsa.ipac.caltech.edu/ibe/data/spherex/';
+            link.target = '_blank';
+            link.rel = 'noopener';
+            link.textContent = 'Abrir el archivo SPHEREx directamente en IRSA';
+            link.className = 'ylma-link';
+            results.appendChild(link);
+        }
     }
 }
 
@@ -544,38 +603,34 @@ function renderCatalogEntries(entries) {
     if (!entries.length) {
         const empty = document.createElement('p');
         empty.className = 'doc-text';
-        empty.textContent = 'No hay directorios o productos FITS en este resultado.';
+        empty.textContent = 'Este directorio no contiene elementos visibles.';
         container.appendChild(empty);
         return;
     }
     entries.forEach((entry) => {
-        const button = document.createElement('button');
-        button.type = 'button';
-        button.className = 'catalog-entry';
-        const isDirectory = entry.kind === 'directory' || Boolean(entry.url && !entry.kind);
-        button.textContent = `${isDirectory ? '📁' : 'FITS'}  ${entry.name}`;
-        button.title = entry.path;
-        button.addEventListener('click', async () => {
-            if (isDirectory) {
+        const isDirectory = entry.kind === 'directory';
+        if (isDirectory) {
+            const button = document.createElement('button');
+            button.type = 'button';
+            button.className = 'catalog-entry';
+            button.textContent = '📁  ' + entry.name;
+            button.title = entry.path;
+            button.addEventListener('click', async () => {
                 if (byId('catalog-path')) byId('catalog-path').value = entry.path;
                 await loadCatalog();
-                return;
-            }
-            if (!entry.path || !entry.name.toLowerCase().match(/\.(fits?|fts)(\.gz)?$/i)) return;
-            if (!aladin) await initAladinViewer();
-            const productUrl = `/api/fits?path=${encodeURIComponent(entry.path)}`;
-            try {
-                if (!aladin) throw new Error('El visor Aladin no está disponible.');
-                aladin.displayImage(productUrl, { name: entry.name });
-                setActiveLayer('layer-fits');
-                if (byId('info-epoch-label')) byId('info-epoch-label').textContent = entry.name;
-                if (byId('hud-survey')) byId('hud-survey').textContent = 'PRODUCTO FITS OFICIAL IRSA';
-                if (status) status.textContent = `Solicitada la carga de ${entry.name}. Si el FITS no es compatible con Aladin, revisa la consola y el estado de red.`;
-            } catch (error) {
-                if (status) status.textContent = `No se pudo abrir el FITS: ${error.message}`;
-            }
-        });
-        container.appendChild(button);
+            });
+            container.appendChild(button);
+        } else if (entry.kind === 'fits' || /\.(fits?|fts)(\.gz)?$/i.test(entry.name)) {
+            const link = document.createElement('a');
+            link.className = 'catalog-entry catalog-download-entry';
+            link.href = entry.url;
+            link.target = '_blank';
+            link.rel = 'noopener';
+            link.download = entry.name;
+            link.textContent = '↓  DESCARGAR  ' + entry.name + (entry.size_bytes ? ' · ' + (entry.size_bytes / 1048576).toFixed(1) + ' MB' : '');
+            link.title = entry.path;
+            container.appendChild(link);
+        }
     });
 }
 

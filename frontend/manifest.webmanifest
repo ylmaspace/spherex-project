@@ -1,0 +1,26 @@
+{
+  "id": "/",
+  "name": "YLMA SPHEREx Explorer",
+  "short_name": "SPHEREx Explorer",
+  "description": "Explorador científico de imágenes SPHEREx y comparador multimagen FITS de YLMA Space.",
+  "start_url": "/",
+  "scope": "/",
+  "display": "standalone",
+  "orientation": "any",
+  "background_color": "#050a0d",
+  "theme_color": "#050a0d",
+  "icons": [
+    {
+      "src": "https://i.postimg.cc/bvD3yLfH/Sphere-X-Explorer.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "https://i.postimg.cc/bvD3yLfH/Sphere-X-Explorer.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any"
+    }
+  ]
+}

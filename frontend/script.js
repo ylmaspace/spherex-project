@@ -699,6 +699,11 @@ async function initAladinViewer() {
             if (byId('hud-coords')) byId('hud-coords').textContent =
                 `RA: ${ra.toFixed(4)} | Dec: ${dec >= 0 ? '+' : ''}${dec.toFixed(4)}`;
         });
+        aladin.on('mouseMove', (position) => {
+            if (!position || !Number.isFinite(position.ra) || !Number.isFinite(position.dec)) return;
+            const cursor = byId('hud-cursor-coords');
+            if (cursor) cursor.textContent = `CURSOR · RA ${position.ra.toFixed(6)}° | Dec ${position.dec >= 0 ? '+' : ''}${position.dec.toFixed(6)}°`;
+        });
         aladin.gotoRaDec(state.currentRA, state.currentDec);
         rebuildSkyMarkers();
     } catch (error) {

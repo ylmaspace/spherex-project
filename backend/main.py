@@ -120,6 +120,29 @@ async def get_catalog(
         raise HTTPException(status_code=503, detail="El catálogo QR2 Level 2 de IRSA no está disponible.") from exc
 
 
+@app.get("/api/product")
+async def get_sia2_product(request: Request, url: str = Query(..., min_length=1, max_length=2048)):
+    """Proxy a FITS access_url returned by IRSA SIA2, preserving byte-range support."""
+    try:
+        range_header = request.headers.get("range") if request else None
+        upstream, chunks = await catalog_service.stream_access_url(url, range_header)
+        headers = {}
+        for key in ("content-length", "content-range", "accept-ranges", "last-modified", "etag"):
+            if key in upstream.headers:
+                headers[key] = upstream.headers[key]
+        headers["Cache-Control"] = "public, max-age=300"
+        return StreamingResponse(
+            chunks, status_code=upstream.status_code,
+            media_type=upstream.headers.get("content-type", "application/fits"),
+            headers=headers,
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    except CatalogError as exc:
+        logger.warning("IRSA SIA2 FITS product unavailable: %s", exc)
+        raise HTTPException(status_code=502, detail="No se pudo recuperar el producto FITS desde IRSA.") from exc
+
+
 @app.get("/api/fits")
 async def get_fits(request: Request, path: str = Query(..., min_length=1, max_length=1024)):
     try:

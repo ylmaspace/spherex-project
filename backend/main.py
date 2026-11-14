@@ -1,6 +1,9 @@
+import os
 import uuid
+from pathlib import Path
 from fastapi import FastAPI, Depends, HTTPException, status
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.staticfiles import StaticFiles
 from sqlalchemy.orm import Session
 
 from backend.database import engine, Base, get_db
@@ -23,9 +26,18 @@ app = FastAPI(
 )
 
 # Enable CORS for frontend integration
+allowed_origins = [
+    origin.strip()
+    for origin in os.getenv(
+        "ALLOWED_ORIGINS",
+        "https://spherexexplorer.study,https://www.spherexexplorer.study,http://localhost:5500,http://127.0.0.1:5500"
+    ).split(",")
+    if origin.strip()
+]
+
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
+    allow_origins=allowed_origins,
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -144,3 +156,9 @@ def submit_answer(payload: AnswerSubmit, db: Session = Depends(get_db)):
 def get_stats(db: Session = Depends(get_db)):
     stats = StatisticsService.get_aggregate_stats(db)
     return stats
+
+# Serve the static frontend from the same Render web service.
+# Keep this mount AFTER all API routes so /api/* and /docs remain available.
+FRONTEND_DIR = Path(__file__).resolve().parent.parent / "frontend"
+if FRONTEND_DIR.is_dir():
+    app.mount("/", StaticFiles(directory=str(FRONTEND_DIR), html=True), name="frontend")

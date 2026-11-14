@@ -8,3 +8,4 @@ astroquery>=0.4.6
 pyvo>=1.5
 python-dotenv>=1.0.0
 sqlalchemy>=2.0.0
+psycopg[binary]>=3.2.0

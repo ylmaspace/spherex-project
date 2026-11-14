@@ -198,6 +198,19 @@ function applyLocalFitsTransform() {
 function initLocalFitsControls() {
     const viewport = byId('fits-local-viewport'); const image = byId('fits-local-image');
     byId('fits-local-reset')?.addEventListener('click', () => { localFitsZoom = 1; localFitsPan = {x:0,y:0}; applyLocalFitsTransform(); });
+    viewport?.addEventListener('mousemove', (event) => {
+        if (!image?.naturalWidth || !image?.naturalHeight) return;
+        const rect = image.getBoundingClientRect();
+        if (!rect.width || !rect.height) return;
+        const x = Math.max(0, Math.min(image.naturalWidth - 1, Math.floor((event.clientX - rect.left) / rect.width * image.naturalWidth)));
+        const y = Math.max(0, Math.min(image.naturalHeight - 1, Math.floor((event.clientY - rect.top) / rect.height * image.naturalHeight)));
+        const readout = byId('fits-local-pixel-coords');
+        if (readout) readout.textContent = 'PIXEL X ' + x + ' · Y ' + y;
+    });
+    viewport?.addEventListener('mouseleave', () => {
+        const readout = byId('fits-local-pixel-coords');
+        if (readout) readout.textContent = 'PIXEL X — · Y —';
+    });
     viewport?.addEventListener('wheel', (event) => { event.preventDefault(); localFitsZoom = Math.max(.25, Math.min(12, localFitsZoom * (event.deltaY < 0 ? 1.15 : 1/1.15))); applyLocalFitsTransform(); }, {passive:false});
     viewport?.addEventListener('pointerdown', (event) => { if (event.target !== image) return; localFitsDrag = {x:event.clientX-localFitsPan.x,y:event.clientY-localFitsPan.y}; viewport.setPointerCapture(event.pointerId); });
     viewport?.addEventListener('pointermove', (event) => { if (!localFitsDrag) return; localFitsPan = {x:event.clientX-localFitsDrag.x,y:event.clientY-localFitsDrag.y}; applyLocalFitsTransform(); });

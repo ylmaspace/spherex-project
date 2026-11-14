@@ -106,7 +106,7 @@ function setupEventListeners() {
 }
 
 function parseObservationIndex(value) {
-    if (!/^\\d+$/.test(String(value).trim()) || observations.length === 0) return null;
+    if (!/^\d+$/.test(String(value).trim()) || observations.length === 0) return null;
     const oneBased = Number(value);
     if (!Number.isSafeInteger(oneBased) || oneBased < 1 || oneBased > observations.length) return null;
     return oneBased - 1;

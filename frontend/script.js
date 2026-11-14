@@ -375,7 +375,7 @@ async function loadFitsFromUrl() {
     }
     if (source.protocol !== 'https:' || source.hostname !== 'irsa.ipac.caltech.edu' ||
         source.username || source.password || source.search || source.hash ||
-        !source.pathname.startsWith('/ibe/data/spherex/') || !/\\.(fits?|fts)$/i.test(source.pathname)) {
+        !source.pathname.startsWith('/ibe/data/spherex/') || !/\.(fits?|fts)$/i.test(source.pathname)) {
         setObservationStatus('Solo se admiten enlaces HTTPS directos a archivos FITS del archivo SPHEREx de IRSA.', 'URL no admitida');
         return;
     }

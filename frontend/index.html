@@ -83,6 +83,7 @@
                         <button class="ylma-btn control-btn" id="layer-fits">FITS IBE</button>
                         <button class="ylma-btn control-btn" id="select-fits-btn" type="button">ABRIR FITS LOCAL</button>
                         <input id="local-fits-input" type="file" accept=".fits,.fit,.fts,application/fits" multiple hidden>
+                        <input id="compare-fits-input" type="file" accept=".fits,.fit,.fts,application/fits" hidden>
                         <button class="ylma-btn control-btn" id="btn-split">VISTA DIVIDIDA</button>
                         <button class="ylma-btn control-btn" id="btn-blink">PARPADEAR (BLINK)</button>
                         <button class="ylma-btn control-btn" id="btn-fs">PANTALLA COMPLETA</button>
@@ -259,7 +260,6 @@
                     <img id="blink-local-image" alt="Imagen FITS alternada durante la comparación" style="display:none;max-width:100%;max-height:100%;object-fit:contain;">
                     <div id="blink-status-label" style="position: absolute; top: 10px; left: 10px; background: rgba(0,0,0,0.8); padding: 4px 8px; color: var(--ylma-gold); font-size: 0.75rem; font-weight: 700;">ÉPOCA A</div>
                 </div>
-                <input id="compare-fits-input" type="file" accept=".fits,.fit,.fts,application/fits" hidden>
                 <div style="display: flex; gap: 16px; width: 100%; justify-content: space-between;">
                     <div>
                         <label style="font-size: 0.75rem; color: var(--text-muted);">Época 1:</label>

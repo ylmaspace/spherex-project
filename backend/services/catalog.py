@@ -23,6 +23,10 @@ class CatalogError(RuntimeError):
     """IRSA IBE catalog or product access failure."""
 
 
+class CatalogProductNotFoundError(CatalogError):
+    """The requested FITS product is not present in an official listing."""
+
+
 @dataclass(frozen=True)
 class CatalogEntry:
     name: str
@@ -200,7 +204,7 @@ class IRSAFileCatalog:
         listed = next((entry for entry in entries
                        if entry.kind == "fits" and entry.path == normalized), None)
         if listed is None:
-            raise ValueError("The requested FITS product is not present in the official IRSA directory listing")
+            raise CatalogProductNotFoundError("The requested FITS product is not present in the official IRSA directory listing")
         url = listed.url
         headers = {"Range": range_header} if range_header and re.fullmatch(r"bytes=\d*-\d*", range_header) else {}
         client = httpx.AsyncClient(timeout=self.timeout, follow_redirects=True)
@@ -223,6 +227,9 @@ class IRSAFileCatalog:
                     await response.aclose()
                     await client.aclose()
             return response, chunks()
+        except httpx.HTTPError as exc:
+            await client.aclose()
+            raise CatalogError("Could not retrieve the FITS product from the official IRSA archive") from exc
         except Exception:
             await client.aclose()
             raise

@@ -8,6 +8,8 @@ let isBlinkingActive = false;
 let observations = [];
 let catalogEntries = [];
 let requestController = null;
+let activeLocalFitsUrl = null;
+let fitsLoadToken = 0;
 let state = {
     userId: localStorage.getItem('ylma_user_id') || 'YLMA-USER-2026',
     currentRA: 150.1,
@@ -131,44 +133,83 @@ function setupEventListeners() {
 
 async function loadLocalFits(file) {
     const name = String(file.name || '');
-    if (!/\.(fits?|fts)$/i.test(name)) {
+    const maxBytes = 120 * 1024 * 1024;
+    if (!/\\.(fits?|fts)$/i.test(name)) {
         setObservationStatus('Formato no válido. Selecciona un archivo FITS.', '');
         return;
     }
-    if (file.size > 50 * 1024 * 1024) {
-        setObservationStatus('El archivo supera el límite de 50 MB para la carga local en el navegador.', '');
+    if (file.size > maxBytes) {
+        setObservationStatus('El archivo supera el límite de 120 MB.', '');
         return;
     }
     await initAladinViewer();
     if (!aladin || typeof aladin.displayFITS !== 'function') {
-        setObservationStatus('La versión cargada de Aladin Lite no permite abrir FITS en este visor.', '');
+        setObservationStatus('Aladin Lite no permite abrir FITS en este visor.', '');
         return;
     }
-    setObservationStatus(`Leyendo FITS local: ${name}…`, 'Procesando');
-    const reader = new FileReader();
-    reader.onerror = () => setObservationStatus('No se pudo leer el archivo seleccionado.', '');
-    reader.onload = () => {
-        try {
-            aladin.displayFITS(
-                String(reader.result),
-                { name },
-                () => {
-                    setActiveLayer('layer-fits');
-                    if (byId('info-epoch-label')) byId('info-epoch-label').textContent = name;
-                    if (byId('hud-survey')) byId('hud-survey').textContent = 'FITS LOCAL';
-                    setObservationStatus(`FITS local cargado: ${name}`, 'Archivo del usuario');
-                },
-                (error) => {
-                    console.error('Local FITS display failed', error);
-                    setObservationStatus('Aladin no pudo interpretar este FITS. Puede ser un MEF o una extensión no compatible.', '');
-                }
-            );
-        } catch (error) {
-            console.error('Local FITS display failed', error);
-            setObservationStatus(`No se pudo abrir el FITS: ${error.message}`, '');
-        }
-    };
-    reader.readAsDataURL(file);
+    if (activeLocalFitsUrl) URL.revokeObjectURL(activeLocalFitsUrl);
+    activeLocalFitsUrl = URL.createObjectURL(file);
+    const objectUrl = activeLocalFitsUrl;
+    const token = ++fitsLoadToken;
+    setObservationStatus(`Abriendo FITS local (${(file.size / 1048576).toFixed(1)} MB): ${name}…`, 'Decodificando');
+    try {
+        aladin.displayFITS(
+            objectUrl,
+            { name },
+            () => {
+                if (token !== fitsLoadToken) return;
+                setActiveLayer('layer-fits');
+                if (byId('info-epoch-label')) byId('info-epoch-label').textContent = name;
+                if (byId('hud-survey')) byId('hud-survey').textContent = 'FITS LOCAL';
+                setObservationStatus(`FITS local cargado: ${name}`, 'Archivo del usuario');
+                URL.revokeObjectURL(objectUrl);
+                if (activeLocalFitsUrl === objectUrl) activeLocalFitsUrl = null;
+            },
+            (error) => {
+                if (token !== fitsLoadToken) return;
+                console.error('Local FITS display failed', error);
+                setObservationStatus('No se pudo decodificar este FITS. Los archivos MEF pueden requerir elegir una extensión de imagen.', '');
+                URL.revokeObjectURL(objectUrl);
+                if (activeLocalFitsUrl === objectUrl) activeLocalFitsUrl = null;
+            }
+        );
+    } catch (error) {
+        URL.revokeObjectURL(objectUrl);
+        if (activeLocalFitsUrl === objectUrl) activeLocalFitsUrl = null;
+        setObservationStatus(`No se pudo abrir el FITS: ${error.message}`, '');
+    }
+}
+
+async function loadRemoteObservationFits(item) {
+    const sourceUrl = observationUrl(item);
+    if (!sourceUrl || !aladin || typeof aladin.displayFITS !== 'function') {
+        if (aladin) aladin.setImageSurvey('P/DSS2/color');
+        return;
+    }
+    const token = ++fitsLoadToken;
+    const label = observationLabel(item);
+    const proxyUrl = `/api/product?${new URLSearchParams({ url: sourceUrl })}`;
+    setObservationStatus(`Descargando y decodificando producto SPHEREx: ${label}…`, 'Cargando FITS');
+    try {
+        aladin.displayFITS(
+            proxyUrl,
+            { name: label },
+            () => {
+                if (token !== fitsLoadToken) return;
+                setActiveLayer('layer-fits');
+                if (byId('info-epoch-label')) byId('info-epoch-label').textContent = label;
+                if (byId('hud-survey')) byId('hud-survey').textContent = 'SPHEREx FITS · IRSA';
+                setObservationStatus(`Producto FITS decodificado: ${label}`, 'IRSA SIA2');
+            },
+            (error) => {
+                if (token !== fitsLoadToken) return;
+                console.error('IRSA FITS decoding failed', error);
+                setObservationStatus('IRSA encontró la observación, pero no se pudo decodificar su FITS. Prueba otro producto.', '');
+            }
+        );
+    } catch (error) {
+        if (token === fitsLoadToken) setObservationStatus(`Error al abrir el producto FITS: ${error.message}`, '');
+    }
 }
 
 function parseObservationIndex(value) {
@@ -374,11 +415,12 @@ function showSelectedObservation() {
     if (byId('hud-survey')) byId('hud-survey').textContent = `IRSA: ${label}`;
     updateSkyPosition();
     const url = observationUrl(item);
-    if (url && aladin && byId('layer-fits')?.classList.contains('active')) {
-        try { aladin.displayImage(url, { name: label }); }
-        catch (error) { console.warn('Aladin cannot display this archive product', error); }
-    } else if (aladin && !byId('layer-fits')?.classList.contains('active')) {
+    if (url && aladin) {
+        loadRemoteObservationFits(item);
+    } else if (aladin) {
+        setActiveLayer('layer-real');
         aladin.setImageSurvey('P/DSS2/color');
+        setObservationStatus('La observación no incluye una URL FITS descargable.', 'Sin producto FITS');
     }
 }
 

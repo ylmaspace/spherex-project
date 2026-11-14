@@ -5,9 +5,9 @@ import uuid
 from collections import defaultdict, deque
 from pathlib import Path
 
-from fastapi import Depends, FastAPI, HTTPException, Query, Request
+from fastapi import Depends, FastAPI, File, HTTPException, Query, Request, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import JSONResponse, StreamingResponse
+from fastapi.responses import FileResponse, JSONResponse, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 from sqlalchemy.orm import Session
 
@@ -19,6 +19,7 @@ from backend.services.catalog import CatalogError, CatalogProductNotFoundError, 
 from backend.services.questions import QuestionsService
 from backend.services.spherex import SPHERExService
 from backend.services.statistics import StatisticsService
+from backend.services.fits_processor import FITSProcessingError, MAX_UPLOAD_BYTES, get_display_path, process_fits_upload
 
 logging.basicConfig(level=os.getenv("LOG_LEVEL", "INFO").upper())
 logger = logging.getLogger(__name__)
@@ -118,6 +119,36 @@ async def get_catalog(
     except CatalogError as exc:
         logger.warning("IRSA catalog unavailable: %s", exc)
         raise HTTPException(status_code=503, detail="El catálogo QR2 Level 2 de IRSA no está disponible.") from exc
+
+
+@app.post("/api/fits/upload")
+async def upload_local_fits(file: UploadFile = File(...)):
+    """Inspect a local FITS, select the best 2D image HDU and extract its celestial WCS."""
+    filename = file.filename or "observation.fits"
+    if not filename.lower().endswith((".fits", ".fit", ".fts")):
+        raise HTTPException(status_code=415, detail="Formato no admitido. Sube un FITS sin comprimir.")
+    content = await file.read(MAX_UPLOAD_BYTES + 1)
+    await file.close()
+    if len(content) > MAX_UPLOAD_BYTES:
+        raise HTTPException(status_code=413, detail="El archivo supera el límite de 120 MB.")
+    try:
+        result = process_fits_upload(filename, content)
+        result.pop("display_path", None)
+        result["display_url"] = f"/api/fits/local/{result['id']}"
+        return result
+    except FITSProcessingError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+
+
+@app.get("/api/fits/local/{upload_id}")
+def get_local_fits(upload_id: str):
+    try:
+        path = get_display_path(upload_id)
+    except FITSProcessingError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    except FileNotFoundError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    return FileResponse(path, media_type="application/fits", filename=f"{upload_id}.fits")
 
 
 @app.get("/api/product")

@@ -24,3 +24,11 @@ jobs:
           python -m pip install -r backend/requirements.txt pytest
       - name: Run automated tests
         run: python -m pytest -q
+      - name: Set up Node.js for frontend syntax checks
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+      - name: Validate frontend JavaScript syntax
+        run: |
+          node --check frontend/script.js
+          node --check frontend/multifits.js

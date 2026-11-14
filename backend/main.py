@@ -134,6 +134,7 @@ async def upload_local_fits(file: UploadFile = File(...)):
     try:
         result = process_fits_upload(filename, content)
         result.pop("display_path", None)
+        result.pop("preview_path", None)
         result["display_url"] = f"/api/fits/local/{result['id']}"
         result["preview_url"] = f"/api/fits/preview/{result['id']}"
         return result

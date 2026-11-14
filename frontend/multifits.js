@@ -1,8 +1,9 @@
 (() => {
 'use strict';
-const MAX_FILES = 16;
+const PACKAGE_FILES = 4;
 const MAX_BYTES = 120 * 1024 * 1024;
-const MAX_BATCH_BYTES = 600 * 1024 * 1024;
+const MAX_PACKAGE_BYTES = 240 * 1024 * 1024;
+let aladinReadyPromise = null;
 const state = { viewer: null, layers: [], directoryPath: '', directoryFiles: [], importingDirectory: false, blinking: false, blinkTimer: null, blinkIndex: 0, splitViewers: [], splitMode: false, previousVisibility: [] };
 const $ = (id) => document.getElementById(id);
 const setStatus = (message, progress) => {
@@ -13,36 +14,71 @@ const selectedInterval = () => [2000, 1000, 500, 333].includes(Number($('multi-b
 const safeName = (name) => String(name || 'FITS').replace(/[<>&"]/g, '');
 const absoluteApiUrl = (path) => new URL(path, window.location.origin).href;
 
-function loadFallbackAladin() {
-    return new Promise((resolve, reject) => {
-        if (window.A && typeof window.A.aladin === 'function') return resolve();
+function loadAladin() {
+    if (aladinReadyPromise) return aladinReadyPromise;
+    aladinReadyPromise = new Promise((resolve, reject) => {
+        const verify = () => {
+            const api = window.A;
+            if (!api || typeof api.aladin !== 'function') {
+                reject(new Error('Aladin Lite no ha cargado su API.'));
+                return;
+            }
+            Promise.resolve(api.init).then(() => {
+                if (typeof api.aladin !== 'function') throw new Error('Aladin Lite terminó de iniciar sin A.aladin.');
+                resolve(api);
+            }).catch(reject);
+        };
+        if (window.A && typeof window.A.aladin === 'function') {
+            verify();
+            return;
+        }
         const script = document.createElement('script');
         script.src = 'https://aladin.cds.unistra.fr/AladinLite/api/v3/latest/aladin.js';
-        script.onload = () => window.A && typeof window.A.aladin === 'function' ? resolve() : reject(new Error('La biblioteca Aladin Lite no expone A.aladin.'));
-        script.onerror = () => reject(new Error('No se pudo cargar Aladin Lite 3.9.0-beta ni la versión estable de respaldo.'));
+        script.onload = verify;
+        script.onerror = () => reject(new Error('No se pudo cargar Aladin Lite v3 estable.'));
         document.head.appendChild(script);
+    }).catch(error => {
+        aladinReadyPromise = null;
+        throw error;
     });
+    return aladinReadyPromise;
 }
 
 function initSphere() {
     if (state.viewer) return Promise.resolve(state.viewer);
-    return loadFallbackAladin().then(() => {
-        state.viewer = window.A.aladin('#multi-sphere-viewer', {
+    return loadAladin().then(api => {
+        const viewer = api.aladin('#multi-sphere-viewer', {
             survey: 'P/DSS2/color', target: '150.1 2.2', fov: 180,
-            projection: 'SIN', cooFrame: 'ICRS', showCooGrid: true,
+            projection: $('multi-projection').value || 'SIN', cooFrame: 'ICRS', showCooGrid: true,
             showProjectionControl: true, showLayersControl: true,
             showFullscreenControl: true, showCooLocation: true,
             showReticle: true, mode: 'dark'
         });
-        if (!state.viewer || typeof state.viewer.displayFITS !== 'function') throw new Error('La versión cargada de Aladin Lite no ofrece displayFITS.');
-        if (typeof state.viewer.on === 'function') {
-            state.viewer.on('mouseMove', (position) => {
+        if (!viewer || typeof viewer.displayFITS !== 'function') throw new Error('La versión estable de Aladin Lite no ofrece displayFITS.');
+        state.viewer = viewer;
+        if (typeof viewer.on === 'function') {
+            viewer.on('mouseMove', position => {
                 if (!position || !Number.isFinite(position.ra) || !Number.isFinite(position.dec)) return;
                 $('multi-cursor-coords').textContent = 'RA ' + position.ra.toFixed(6) + '° · Dec ' + position.dec.toFixed(6) + '°';
             });
         }
-        return state.viewer;
+        return viewer;
     });
+}
+
+function buildPackages(items) {
+    const packages = [];
+    let current = [], bytes = 0;
+    for (const item of items) {
+        const size = Number(item.size ?? item.size_bytes ?? 0);
+        if (current.length && (current.length >= PACKAGE_FILES || (size > 0 && bytes + size > MAX_PACKAGE_BYTES))) {
+            packages.push(current); current = []; bytes = 0;
+        }
+        current.push(item);
+        bytes += size;
+    }
+    if (current.length) packages.push(current);
+    return packages;
 }
 
 function uploadFits(file, progressCallback) {
@@ -100,46 +136,51 @@ function displayLayer(viewer, record, layerId) {
 async function loadSelectedFiles() {
     const files = Array.from($('multi-fits-input').files || []);
     if (!files.length) { setStatus('Selecciona al menos un archivo FITS.', 0); return; }
-    if (files.length > MAX_FILES) { setStatus('El límite inicial es de ' + MAX_FILES + ' FITS por lote.', 0); return; }
-    const invalid = files.find(file => !/\.(fits?|fts)$/i.test(file.name) || !file.size || file.size > MAX_BYTES);
+    const invalid = files.find(file => !/\.(fits?|fts)(\.gz)?$/i.test(file.name) || !file.size || file.size > MAX_BYTES);
     if (invalid) { setStatus('Archivo no válido o superior a 120 MB: ' + invalid.name, 0); return; }
-    const totalBytes = files.reduce((sum, file) => sum + file.size, 0);
-    if (totalBytes > MAX_BATCH_BYTES) { setStatus('El lote supera el límite de 600 MB. Divide la selección en varios lotes.', 0); return; }
+    const packages = buildPackages(files);
     stopBlink();
     $('multi-load-btn').disabled = true;
+    let success = 0, failed = 0, completed = 0;
     try {
         const viewer = await initSphere();
         viewer.setProjection($('multi-projection').value);
-        let success = 0;
-        for (let index = 0; index < files.length; index++) {
-            const file = files[index];
-            setStatus('Subiendo y procesando ' + file.name + ' (' + (index + 1) + '/' + files.length + ')…', index / files.length * 100);
-            const result = await uploadFits(file, percent => {
-                setStatus('Procesando ' + file.name + ' · ' + Math.round(percent) + '%', ((index + percent / 100) / files.length) * 100);
-            });
-            if (!result.id || !result.display_url) throw new Error('El backend no devolvió una FITS procesada para ' + file.name + '.');
-            const layerId = 'ylma-multifits-' + result.id;
-            setStatus('Renderizando ' + file.name + ' en la esfera…', ((index + 0.9) / files.length) * 100);
-            const rendered = await displayLayer(viewer, result, layerId);
-            if (rendered.image && typeof rendered.image.setOpacity === 'function') rendered.image.setOpacity(0.58);
-            state.layers.push({
-                id: layerId, filename: file.name, image: rendered.image,
-                ra: Number.isFinite(rendered.ra) ? rendered.ra : result.ra,
-                dec: Number.isFinite(rendered.dec) ? rendered.dec : result.dec,
-                width: result.width, height: result.height, display_url: result.display_url,
-                visible: true, opacity: 0.58
-            });
-            success++;
-            renderLayerList();
-            if (success === 1 && Number.isFinite(rendered.ra) && Number.isFinite(rendered.dec)) viewer.gotoRaDec(rendered.ra, rendered.dec);
+        for (let packageIndex = 0; packageIndex < packages.length; packageIndex++) {
+            const pack = packages[packageIndex];
+            setStatus('PAQUETE ' + (packageIndex + 1) + '/' + packages.length + ' · ' + pack.length + ' FITS', completed / files.length * 100);
+            for (const file of pack) {
+                try {
+                    setStatus('Subiendo ' + file.name + ' · ' + (completed + 1) + '/' + files.length, completed / files.length * 100);
+                    const result = await uploadFits(file, percent => {
+                        setStatus('Paquete ' + (packageIndex + 1) + '/' + packages.length + ' · ' + file.name + ' · ' + Math.round(percent) + '%',
+                            ((completed + percent / 100) / files.length) * 100);
+                    });
+                    if (!result.id || !result.display_url) throw new Error('El backend no devolvió un FITS procesado.');
+                    const layerId = 'ylma-multifits-' + result.id;
+                    const rendered = await displayLayer(viewer, result, layerId);
+                    if (rendered.image && typeof rendered.image.setOpacity === 'function') rendered.image.setOpacity(0.58);
+                    state.layers.push({
+                        id: layerId, filename: file.name, image: rendered.image,
+                        ra: Number.isFinite(rendered.ra) ? rendered.ra : result.ra,
+                        dec: Number.isFinite(rendered.dec) ? rendered.dec : result.dec,
+                        width: result.width, height: result.height, display_url: result.display_url,
+                        visible: true, opacity: 0.58
+                    });
+                    success++; renderLayerList();
+                    if (success === 1 && Number.isFinite(rendered.ra) && Number.isFinite(rendered.dec)) viewer.gotoRaDec(rendered.ra, rendered.dec);
+                } catch (error) {
+                    failed++;
+                    console.error('FITS package item failed: ' + file.name, error);
+                } finally {
+                    completed++;
+                }
+            }
         }
-        setStatus(success + ' de ' + files.length + ' imágenes cargadas y renderizadas.', 100);
-        $('multi-blink-btn').disabled = state.layers.length < 2;
-        $('multi-split-btn').disabled = state.layers.length < 2;
+        setStatus('Carga local terminada · ' + success + '/' + files.length + ' renderizados · ' + failed + ' errores · ' + packages.length + ' paquetes.', 100);
         $('multi-fits-input').value = '';
     } catch (error) {
         console.error('Multi-FITS load error', error);
-        setStatus('Carga interrumpida: ' + error.message, 0);
+        setStatus('No se pudo iniciar la carga: ' + error.message, 0);
     } finally {
         $('multi-load-btn').disabled = false;
         $('multi-blink-btn').disabled = state.layers.length < 2;
@@ -320,7 +361,7 @@ async function scanIRsaDirectory() {
         const firstResponse = await fetch(firstUrl);
         const first = await firstResponse.json();
         if (!firstResponse.ok) throw new Error(first.detail || 'IRSA no ha podido listar este directorio.');
-        const pages = Math.min(Number(first.fits_pages) || 1, 50);
+        const pages = Math.min(Number(first.fits_pages) || 1, 100);
         all.push(...(first.fits_files || first.observations || []));
         for (let page = 2; page <= pages; page++) {
             $('multi-directory-summary').textContent = 'Leyendo directorio… página ' + page + '/' + pages;
@@ -337,7 +378,7 @@ async function scanIRsaDirectory() {
         $('multi-directory-select-all').disabled = all.length === 0;
         $('multi-directory-select-all').checked = all.length > 0;
         $('multi-directory-summary').textContent = all.length + ' FITS encontrados' +
-            (Number(first.fits_count ?? first.count) > all.length ? ' · índice limitado a 5.000 archivos para esta exploración' : '') +
+            (Number(first.fits_count ?? first.count) > all.length ? ' · índice limitado a 10.000 archivos por exploración' : '') +
             (all.length ? ' · selecciónalos y pulsa importar' : ' · no hay FITS en esta carpeta');
         $('multi-directory-import').disabled = all.length === 0;
     } catch (error) {
@@ -353,18 +394,38 @@ function renderDirectoryFiles() {
         const empty = document.createElement('div'); empty.className = 'multi-empty'; empty.textContent = 'No se han encontrado archivos FITS.';
         container.appendChild(empty); return;
     }
-    state.directoryFiles.forEach((file, index) => {
-        const label = document.createElement('label'); label.className = 'multi-directory-file';
-        const checkbox = document.createElement('input'); checkbox.type = 'checkbox'; checkbox.checked = true;
-        checkbox.dataset.index = String(index); checkbox.addEventListener('change', updateDirectorySelection);
-        const text = document.createElement('span'); text.textContent = file.name;
-        const meta = document.createElement('small'); meta.textContent = file.size_bytes ? (file.size_bytes / 1048576).toFixed(1) + ' MB' : 'Tamaño no indicado por IRSA';
-        text.appendChild(meta); label.append(checkbox, text); container.appendChild(label);
+    const packages = buildPackages(state.directoryFiles);
+    packages.forEach((pack, packageIndex) => {
+        const card = document.createElement('section'); card.className = 'multi-directory-package';
+        const heading = document.createElement('div'); heading.className = 'multi-directory-package-heading';
+        const label = document.createElement('label');
+        const packageSelect = document.createElement('input'); packageSelect.type = 'checkbox'; packageSelect.checked = true;
+        packageSelect.setAttribute('aria-label', 'Seleccionar paquete ' + (packageIndex + 1));
+        label.append(packageSelect, document.createTextNode('PAQUETE ' + String(packageIndex + 1).padStart(2, '0')));
+        const count = document.createElement('small');
+        count.textContent = pack.length + ' FITS · ' + (pack.reduce((sum, file) => sum + Number(file.size_bytes || 0), 0) / 1048576).toFixed(1) + ' MB conocidos';
+        heading.append(label, count);
+        const filesBox = document.createElement('div'); filesBox.className = 'multi-directory-package-files';
+        pack.forEach(file => {
+            const index = state.directoryFiles.indexOf(file);
+            const row = document.createElement('label'); row.className = 'multi-directory-file';
+            const checkbox = document.createElement('input'); checkbox.type = 'checkbox'; checkbox.checked = true;
+            checkbox.className = 'multi-directory-file-select'; checkbox.dataset.index = String(index);
+            checkbox.addEventListener('change', updateDirectorySelection);
+            const text = document.createElement('span'); text.textContent = file.name;
+            const meta = document.createElement('small'); meta.textContent = file.size_bytes ? (file.size_bytes / 1048576).toFixed(1) + ' MB' : 'Tamaño no indicado por IRSA';
+            text.appendChild(meta); row.append(checkbox, text); filesBox.appendChild(row);
+        });
+        packageSelect.addEventListener('change', () => {
+            filesBox.querySelectorAll('.multi-directory-file-select').forEach(input => { input.checked = packageSelect.checked; });
+            updateDirectorySelection();
+        });
+        card.append(heading, filesBox); container.appendChild(card);
     });
     updateDirectorySelection();
 }
 function updateDirectorySelection() {
-    const selected = $('multi-directory-files').querySelectorAll('input[type="checkbox"]:checked').length;
+    const selected = $('multi-directory-files').querySelectorAll('.multi-directory-file-select:checked').length;
     const total = state.directoryFiles.length;
     $('multi-directory-summary').textContent = selected + ' de ' + total + ' FITS seleccionados';
     $('multi-directory-import').disabled = selected === 0 || state.importingDirectory;
@@ -372,31 +433,39 @@ function updateDirectorySelection() {
 }
 async function importDirectorySelection() {
     if (state.importingDirectory) return;
-    const selectedIndexes = Array.from($('multi-directory-files').querySelectorAll('input[type="checkbox"]:checked'))
+    const selectedIndexes = Array.from($('multi-directory-files').querySelectorAll('.multi-directory-file-select:checked'))
         .map(input => Number(input.dataset.index));
     const selected = selectedIndexes.map(index => state.directoryFiles[index]).filter(Boolean);
     if (!selected.length) return;
-    if (!confirm('Se procesarán ' + selected.length + ' archivos FITS desde IRSA. La descarga y el análisis se harán desde el servidor. ¿Continuar?')) return;
+    if (!confirm('Se importarán ' + selected.length + ' FITS en paquetes automáticos de hasta 4 archivos. ¿Continuar?')) return;
     state.importingDirectory = true;
     $('multi-directory-import').disabled = true;
     $('multi-directory-scan').disabled = true;
     stopBlink();
-    let loaded = 0, failed = 0;
+    let loaded = 0, failed = 0, finished = 0;
+    const packages = buildPackages(selected);
     try {
         const viewer = await initSphere();
         viewer.setProjection($('multi-projection').value);
-        for (let offset = 0; offset < selected.length; offset += MAX_FILES) {
-            const batch = selected.slice(offset, offset + MAX_FILES);
-            $('multi-directory-summary').textContent = 'Descargando lote ' + (Math.floor(offset / MAX_FILES) + 1) +
-                ' · ' + Math.min(offset + batch.length, selected.length) + '/' + selected.length;
-            const response = await fetch('/api/fits/import-directory', {
-                method: 'POST', headers: {'Content-Type':'application/json'},
-                body: JSON.stringify({directory_path: state.directoryPath, files: batch.map(file => file.path)})
-            });
-            const payload = await response.json();
-            if (!response.ok) throw new Error(payload.detail || 'El servidor no pudo importar el lote.');
-            const results = payload.results || [];
-            for (const result of results) {
+        for (let packageIndex = 0; packageIndex < packages.length; packageIndex++) {
+            const pack = packages[packageIndex];
+            $('multi-directory-summary').textContent = 'Descargando PAQUETE ' + (packageIndex + 1) + '/' + packages.length +
+                ' · ' + pack.length + ' archivos · ' + finished + '/' + selected.length + ' completados';
+            let payload;
+            try {
+                const response = await fetch('/api/fits/import-directory', {
+                    method: 'POST', headers: {'Content-Type':'application/json'},
+                    body: JSON.stringify({directory_path: state.directoryPath, files: pack.map(file => file.path)})
+                });
+                payload = await response.json();
+                if (!response.ok) throw new Error(payload.detail || 'HTTP ' + response.status);
+            } catch (error) {
+                failed += pack.length; finished += pack.length;
+                console.error('IRSA package ' + (packageIndex + 1) + ' failed', error);
+                $('multi-directory-summary').textContent = 'Paquete ' + (packageIndex + 1) + ' fallido: ' + error.message + ' · se continúa con el siguiente.';
+                continue;
+            }
+            for (const result of payload.results || []) {
                 try {
                     const layerId = 'ylma-multifits-' + result.id;
                     const rendered = await displayLayer(viewer, result, layerId);
@@ -411,23 +480,69 @@ async function importDirectorySelection() {
                     loaded++; renderLayerList();
                     if (loaded === 1 && Number.isFinite(rendered.ra) && Number.isFinite(rendered.dec)) viewer.gotoRaDec(rendered.ra, rendered.dec);
                 } catch (error) {
-                    failed++;
-                    console.warn('No se pudo representar ' + result.filename, error);
-                }
+                    failed++; console.warn('No se pudo representar ' + result.filename, error);
+                } finally { finished++; }
             }
-            failed += (payload.errors || []).length;
-            const details = (payload.errors || []).map(item => item.filename + ': ' + item.error).join(' · ');
-            $('multi-directory-summary').textContent = 'Importados ' + loaded + '/' + selected.length +
-                (failed ? ' · ' + failed + ' errores' : '') + (details ? ' · ' + details : '');
+            const itemErrors = payload.errors || [];
+            failed += itemErrors.length; finished += itemErrors.length;
+            $('multi-directory-summary').textContent = 'Paquete ' + (packageIndex + 1) + '/' + packages.length +
+                ' · ' + loaded + ' FITS en esfera · ' + failed + ' errores · ' + finished + '/' + selected.length + ' procesados';
         }
-        setStatus('Importación de directorio finalizada: ' + loaded + ' FITS incorporados' + (failed ? ', ' + failed + ' errores.' : '.'), 100);
+        setStatus('Importación IRSA terminada · ' + loaded + '/' + selected.length + ' renderizados · ' + failed + ' errores · ' + packages.length + ' paquetes.', 100);
+        $('multi-directory-summary').textContent = 'Finalizado: ' + loaded + ' FITS incorporados · ' + failed + ' errores · ' + packages.length + ' paquetes.';
     } catch (error) {
-        setStatus('Importación de directorio interrumpida: ' + error.message, 0);
+        setStatus('No se pudo iniciar la importación IRSA: ' + error.message, 0);
         $('multi-directory-summary').textContent = error.message;
     } finally {
         state.importingDirectory = false;
         $('multi-directory-import').disabled = state.directoryFiles.length === 0;
         $('multi-directory-scan').disabled = false;
+        $('multi-blink-btn').disabled = state.layers.length < 2;
+        $('multi-split-btn').disabled = state.layers.length < 2;
+    }
+}
+
+async function importSingleUrl() {
+    const input = $('multi-single-url');
+    const status = $('multi-single-url-status');
+    const raw = input.value.trim();
+    let parsed;
+    try { parsed = new URL(raw); } catch (_) { status.textContent = 'Introduce una URL válida.'; return; }
+    if (parsed.protocol !== 'https:' || parsed.hostname !== 'irsa.ipac.caltech.edu' ||
+        !parsed.pathname.startsWith('/ibe/data/spherex/') || !/\.(fits?|fts)(\.gz)?$/i.test(parsed.pathname) ||
+        parsed.username || parsed.password) {
+        status.textContent = 'Solo se admiten URL HTTPS directas de FITS en el archivo oficial SPHEREx de IRSA.';
+        return;
+    }
+    const button = $('multi-single-url-import');
+    button.disabled = true;
+    status.textContent = 'Descargando y procesando desde IRSA en el servidor…';
+    try {
+        const response = await fetch('/api/fits/import-url', {
+            method: 'POST', headers: {'Content-Type':'application/json'},
+            body: JSON.stringify({url: parsed.href})
+        });
+        const payload = await response.json();
+        if (!response.ok) throw new Error(payload.detail || 'HTTP ' + response.status);
+        const viewer = await initSphere();
+        const layerId = 'ylma-multifits-' + payload.id;
+        const rendered = await displayLayer(viewer, payload, layerId);
+        if (rendered.image && typeof rendered.image.setOpacity === 'function') rendered.image.setOpacity(0.58);
+        state.layers.push({
+            id: layerId, filename: payload.filename, image: rendered.image,
+            ra: Number.isFinite(rendered.ra) ? rendered.ra : payload.ra,
+            dec: Number.isFinite(rendered.dec) ? rendered.dec : payload.dec,
+            width: payload.width, height: payload.height, display_url: payload.display_url,
+            visible: true, opacity: 0.58
+        });
+        renderLayerList();
+        if (state.layers.length === 1 && Number.isFinite(rendered.ra) && Number.isFinite(rendered.dec)) viewer.gotoRaDec(rendered.ra, rendered.dec);
+        status.textContent = 'FITS incorporado y renderizado: ' + payload.filename;
+        setStatus('URL IRSA incorporada correctamente.', 100);
+    } catch (error) {
+        status.textContent = 'Error al importar URL: ' + error.message;
+    } finally {
+        button.disabled = false;
         $('multi-blink-btn').disabled = state.layers.length < 2;
         $('multi-split-btn').disabled = state.layers.length < 2;
     }
@@ -441,8 +556,9 @@ $('multi-blink-interval').addEventListener('change', changeBlinkInterval);
 $('multi-projection').addEventListener('change', setProjection);
 $('multi-directory-scan').addEventListener('click', scanIRsaDirectory);
 $('multi-directory-import').addEventListener('click', importDirectorySelection);
+$('multi-single-url-import').addEventListener('click', importSingleUrl);
 $('multi-directory-select-all').addEventListener('change', () => {
-    $('multi-directory-files').querySelectorAll('input[type=checkbox]').forEach(input => { input.checked = $('multi-directory-select-all').checked; });
+    $('multi-directory-files').querySelectorAll('.multi-directory-file-select').forEach(input => { input.checked = $('multi-directory-select-all').checked; });
     updateDirectorySelection();
 });
 window.addEventListener('beforeunload', () => stopBlink(false));

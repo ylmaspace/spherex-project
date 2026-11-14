@@ -7,6 +7,7 @@ from __future__ import annotations
 
 import logging
 import os
+import re
 from typing import Any
 
 import httpx
@@ -86,26 +87,42 @@ class IRSAService:
     async def _discover_table(self) -> tuple[str, str, set[str]]:
         if self._table and self._columns:
             return self._table[0], self._table[1], self._columns
+
+        # TAP_SCHEMA.tables exposes schema_name and the canonical table_name.
+        # TAP_SCHEMA.columns has table_name but does NOT define schema_name;
+        # use the exact table_name advertised by TAP_SCHEMA.tables to join them.
         rows = await self._tap(
             "SELECT schema_name, table_name FROM TAP_SCHEMA.tables "
-            "WHERE LOWER(table_name) = 'obscore'"
+            "WHERE LOWER(table_name) LIKE '%obscore%'"
         )
-        available = {
-            (str(row.get("schema_name", "")).lower(), str(row.get("table_name", "")).lower())
-            for row in rows
-        }
-        for schema, table in self.TABLE_CANDIDATES:
-            if (schema, table) not in available:
+        candidates = []
+        allowed_schemas = {schema for schema, _ in self.TABLE_CANDIDATES}
+        for row in rows:
+            schema = str(row.get("schema_name", "")).strip()
+            table_name = str(row.get("table_name", "")).strip()
+            bare_name = table_name.rsplit(".", 1)[-1].strip('"').lower()
+            if schema.lower() not in allowed_schemas or bare_name != "obscore":
                 continue
+            if not re.fullmatch(r'[A-Za-z0-9_."-]+', schema) or not re.fullmatch(r'[A-Za-z0-9_."-]+', table_name):
+                logger.warning("Ignoring unexpected TAP table identifier from metadata")
+                continue
+            candidates.append((schema, table_name))
+
+        for schema, metadata_table_name in candidates:
+            escaped_table = metadata_table_name.replace("'", "''")
             column_rows = await self._tap(
                 "SELECT column_name FROM TAP_SCHEMA.columns "
-                f"WHERE LOWER(schema_name) = '{schema}' AND LOWER(table_name) = '{table}'"
+                f"WHERE LOWER(table_name) = LOWER('{escaped_table}')"
             )
             columns = {str(row.get("column_name", "")).lower() for row in column_rows}
             if all(column in columns for column in self.REQUIRED_COORDINATES):
-                self._table, self._columns = (schema, table), columns
-                return schema, table, columns
-        if not available:
+                query_table = metadata_table_name
+                if "." not in query_table:
+                    query_table = f"{schema}.{query_table}"
+                self._table, self._columns = (schema, query_table), columns
+                return schema, query_table, columns
+
+        if not rows:
             raise IRSATableNotFoundError("No ObsCore table was advertised by IRSA TAP_SCHEMA")
         raise IRSAIncompatibleSchemaError("IRSA ObsCore tables do not expose s_ra and s_dec")
 
@@ -120,12 +137,12 @@ class IRSAService:
             f"CONTAINS(POINT('ICRS', s_ra, s_dec), "
             f"CIRCLE('ICRS', {float(ra):.8f}, {float(dec):.8f}, {float(radius):.8f})) = 1"
         )
-        adql = f"SELECT TOP {safe_limit} {', '.join(selected)} FROM {schema}.{table} WHERE {where}"
+        adql = f"SELECT TOP {safe_limit} {', '.join(selected)} FROM {table} WHERE {where}"
         if "t_min" in columns:
             adql += " ORDER BY t_min DESC"
         rows = await self._tap(adql)
         return {
-            "source": f"IRSA TAP {schema}.{table}",
+            "source": f"IRSA TAP {table}",
             "is_demo": False,
             "count": len(rows),
             "observations": rows,
@@ -140,7 +157,7 @@ class IRSAService:
         if identifier is None:
             raise IRSAIncompatibleSchemaError("The IRSA ObsCore table has no supported observation identifier")
         escaped = obs_id.strip().replace("'", "''")
-        rows = await self._tap(f"SELECT TOP 1 * FROM {schema}.{table} WHERE {identifier} = '{escaped}'")
+        rows = await self._tap(f"SELECT TOP 1 * FROM {table} WHERE {identifier} = '{escaped}'")
         if not rows:
             raise ObservationNotFoundError(f"Observation {obs_id} was not found")
         return {"source": f"IRSA TAP {schema}.{table}", "is_demo": False, "observation": rows[0]}

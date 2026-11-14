@@ -81,7 +81,7 @@ async def get_observations(
         return await spherex_service.search_sky(ra, dec, radius, limit)
     except IRSAError as exc:
         logger.warning("IRSA observations unavailable: %s", exc)
-        raise HTTPException(status_code=503, detail="El archivo IRSA no está disponible o no tiene un esquema compatible. Inténtalo más tarde.") from exc
+        raise HTTPException(status_code=503, detail="IRSA SIA2 no está disponible o devolvió una respuesta incompatible. Inténtalo más tarde.") from exc
 
 @app.get("/api/observation/{obs_id}")
 async def get_observation_detail(obs_id: str):

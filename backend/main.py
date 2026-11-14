@@ -14,7 +14,7 @@ from sqlalchemy.orm import Session
 from backend.database import Base, engine, get_db
 from backend.models import AnswerLog, User
 from backend.schemas import AnswerResponse, AnswerSubmit, StatsResponse, UserCreate, UserResponse
-from backend.services.irsa import IRSAUnavailableError, ObservationNotFoundError
+from backend.services.irsa import IRSAError, IRSAUnavailableError, ObservationNotFoundError
 from backend.services.catalog import CatalogError, IRSAFileCatalog
 from backend.services.questions import QuestionsService
 from backend.services.spherex import SPHERExService
@@ -79,7 +79,7 @@ async def get_observations(
 ):
     try:
         return await spherex_service.search_sky(ra, dec, radius, limit)
-    except IRSAUnavailableError as exc:
+    except IRSAError as exc:
         logger.warning("IRSA observations unavailable: %s", exc)
         raise HTTPException(status_code=503, detail="El archivo IRSA no está disponible o no tiene un esquema compatible. Inténtalo más tarde.") from exc
 

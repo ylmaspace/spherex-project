@@ -179,6 +179,8 @@ class IRSAFileCatalog:
         directories = [{"name": entry.name, "path": entry.path, "url": entry.url, "kind": "directory"}
                        for entry in entries if entry.kind == "directory"]
         paged_files = all_files[start:start + page_size]
+        fits_start = (page - 1) * page_size
+        paged_fits = fits_files[fits_start:fits_start + page_size]
         return {
             "source": "IRSA IBE SPHEREx archive",
             "root_url": IBE_ROOT,
@@ -189,7 +191,10 @@ class IRSAFileCatalog:
             "page": page,
             "page_size": page_size,
             "pages": (len(all_files) + page_size - 1) // page_size,
-            "observations": [self._entry_dict(entry) for entry in fits_files[start:start + page_size]],
+            "observations": [self._entry_dict(entry) for entry in paged_fits],
+            "fits_files": [self._entry_dict(entry) for entry in paged_fits],
+            "fits_count": len(fits_files),
+            "fits_pages": (len(fits_files) + page_size - 1) // page_size,
             "metadata_note": "Only metadata present in the official directory listing is returned.",
         }
 

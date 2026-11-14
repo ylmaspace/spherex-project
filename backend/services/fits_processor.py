@@ -7,6 +7,7 @@ from pathlib import Path
 from typing import Any
 
 import numpy as np
+from PIL import Image
 from astropy.io import fits
 from astropy.wcs import WCS
 
@@ -30,6 +31,7 @@ def process_fits_upload(filename: str, content: bytes) -> dict[str, Any]:
     upload_id = uuid.uuid4().hex
     original_path = UPLOAD_DIR / f"{upload_id}.fits"
     display_path = UPLOAD_DIR / f"{upload_id}-display.fits"
+    preview_path = UPLOAD_DIR / f"{upload_id}-preview.png"
     try:
         original_path.write_bytes(content)
         with fits.open(original_path, memmap=True, lazy_load_hdus=True) as hdus:
@@ -66,6 +68,19 @@ def process_fits_upload(filename: str, content: bytes) -> dict[str, Any]:
             fits.PrimaryHDU(data=np.asarray(image, dtype=np.float32), header=header).writeto(
                 display_path, overwrite=True, output_verify="silentfix"
             )
+            # Independent PNG preview: does not call Aladin, CDS, IRSA or any remote API.
+            preview_data = np.asarray(image, dtype=np.float32)
+            valid = preview_data[np.isfinite(preview_data)]
+            if valid.size == 0:
+                raise FITSProcessingError("La extensión seleccionada no contiene píxeles válidos.")
+            p_low, p_high = np.percentile(valid, [1.0, 99.5])
+            if not np.isfinite(p_low) or not np.isfinite(p_high) or p_high <= p_low:
+                p_low, p_high = float(valid.min()), float(valid.max())
+            if p_high <= p_low:
+                p_high = p_low + 1.0
+            normalized = np.nan_to_num((preview_data - p_low) / (p_high - p_low), nan=0.0, posinf=1.0, neginf=0.0)
+            pixels = np.clip(normalized * 255.0, 0, 255).astype(np.uint8)
+            Image.fromarray(pixels, mode="L").save(preview_path, format="PNG", optimize=True)
             finite = np.asarray(image, dtype=np.float32)
             finite = finite[np.isfinite(finite)]
             if finite.size == 0:
@@ -95,6 +110,7 @@ def process_fits_upload(filename: str, content: bytes) -> dict[str, Any]:
                 "dec": dec,
                 "pixel_scale_arcsec": pixel_scale_arcsec,
                 "display_path": str(display_path),
+                "preview_path": str(preview_path),
             }
     except FITSProcessingError:
         original_path.unlink(missing_ok=True)
@@ -103,6 +119,7 @@ def process_fits_upload(filename: str, content: bytes) -> dict[str, Any]:
     except Exception as exc:
         original_path.unlink(missing_ok=True)
         display_path.unlink(missing_ok=True)
+        preview_path.unlink(missing_ok=True)
         raise FITSProcessingError(f"No se pudo interpretar el FITS: {exc}") from exc
 
 
@@ -112,4 +129,13 @@ def get_display_path(upload_id: str) -> Path:
     path = UPLOAD_DIR / f"{upload_id}-display.fits"
     if not path.is_file():
         raise FileNotFoundError("El FITS procesado ya no está disponible en este servidor.")
+    return path
+
+
+def get_preview_path(upload_id: str) -> Path:
+    if not upload_id or not upload_id.isalnum() or len(upload_id) != 32:
+        raise FITSProcessingError("Identificador de FITS no válido.")
+    path = UPLOAD_DIR / f"{upload_id}-preview.png"
+    if not path.is_file():
+        raise FileNotFoundError("La vista previa ya no está disponible en este servidor.")
     return path

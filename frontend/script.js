@@ -1,427 +1,365 @@
-// YLMA SPHEREx Explorer - Split View, Blink Mode & Aladin Integration
+// YLMA SPHEREx Explorer — same-origin API and archive-backed observations only.
 let aladin = null;
 let aladinLeft = null;
 let aladinRight = null;
 let isSplitMode = false;
-
 let blinkInterval = null;
 let isBlinkingActive = false;
-
+let observations = [];
+let requestController = null;
 let state = {
     userId: localStorage.getItem('ylma_user_id') || 'YLMA-USER-2026',
     currentRA: 150.1,
     currentDec: 2.2,
-    currentRadius: 10,
-    epochs: [], 
-    currentEpochIndex: 0,
+    currentRadius: 2,
+    currentIndex: 0,
     splitIndexLeft: 0,
-    splitIndexRight: 30
+    splitIndexRight: 0
 };
+
+const byId = (id) => document.getElementById(id);
+const API = '';
 
 document.addEventListener('DOMContentLoaded', () => {
     initUser();
-    generateDynamicTimeline();
     setupEventListeners();
+    setObservationStatus('Listo para consultar IRSA.');
 });
 
 function initUser() {
-    const badge = document.getElementById('user-session-badge');
-    if (badge) badge.innerText = state.userId;
+    const badge = byId('user-session-badge');
+    if (badge) badge.textContent = state.userId;
 }
 
-function generateDynamicTimeline() {
-    state.epochs = [];
-    const baseDate = new Date("2026-09-01T00:00:00Z");
-    const totalItems = 60; // 60 minutos dinámicos reales en 2026
-
-    for (let i = 0; i < totalItems; i++) {
-        let itemDate = new Date(baseDate.getTime() + i * 60 * 1000);
-        
-        let day = String(itemDate.getUTCDate()).padStart(2, '0');
-        let monthNames = ["ENE", "FEB", "MAR", "ABR", "MAY", "JUN", "JUL", "AGO", "SEP", "OCT", "NOV", "DIC"];
-        let month = monthNames[itemDate.getUTCMonth()];
-        let year = itemDate.getUTCFullYear();
-        
-        let hours = String(itemDate.getUTCHours()).padStart(2, '0');
-        let minutes = String(itemDate.getUTCMinutes()).padStart(2, '0');
-        let seconds = String(itemDate.getUTCSeconds()).padStart(2, '0');
-
-        let dateStr = `${day} ${month} ${year}`;
-        let timeStr = `${hours}:${minutes}:${seconds}`;
-        let fitsFileName = `level2_${year}${String(itemDate.getUTCMonth()+1).padStart(2,'0')}${day}_${hours}${minutes}_spx.fits`;
-
-        state.epochs.push({
-            label: dateStr,
-            time: timeStr,
-            folder: "2026W36_4B",
-            fitsName: fitsFileName
-        });
-    }
-
-    const epochRange = document.getElementById('epoch-range');
-    if (epochRange) {
-        epochRange.min = 0;
-        epochRange.max = state.epochs.length - 1;
-        epochRange.step = 1;
-        epochRange.value = 0;
-    }
-
-    // Poblar selects del modal de Blink
-    populateBlinkSelects();
+function setObservationStatus(message, count = '') {
+    if (byId('info-status')) byId('info-status').textContent = message;
+    if (byId('info-count')) byId('info-count').textContent = count;
 }
 
-function populateBlinkSelects() {
-    const select1 = document.getElementById('blink-epoch-1');
-    const select2 = document.getElementById('blink-epoch-2');
-    if (!select1 || !select2) return;
-
-    select1.innerHTML = '';
-    select2.innerHTML = '';
-
-    state.epochs.forEach((ep, index) => {
-        let opt1 = document.createElement('option');
-        opt1.value = index;
-        opt1.innerText = `${ep.label} - ${ep.time}`;
-        select1.appendChild(opt1);
-
-        let opt2 = document.createElement('option');
-        opt2.value = index;
-        opt2.innerText = `${ep.label} - ${ep.time}`;
-        if (index === 15) opt2.selected = true; // Seleccionar una distinta por defecto
-        select2.appendChild(opt2);
+function setupEventListeners() {
+    byId('explore-btn')?.addEventListener('click', async () => {
+        byId('landing-view').classList.remove('active');
+        byId('explorer-view').classList.add('active');
+        await initAladinViewer();
+        await searchObservations();
+    });
+    byId('back-home')?.addEventListener('click', () => {
+        byId('explorer-view').classList.remove('active');
+        byId('landing-view').classList.add('active');
+    });
+    byId('search-form')?.addEventListener('submit', async (event) => {
+        event.preventDefault();
+        state.currentRA = Number(byId('input-ra').value);
+        state.currentDec = Number(byId('input-dec').value);
+        state.currentRadius = Number(byId('input-radius').value);
+        if (!Number.isFinite(state.currentRA) || state.currentRA < 0 || state.currentRA > 360 ||
+            !Number.isFinite(state.currentDec) || state.currentDec < -90 || state.currentDec > 90 ||
+            !Number.isFinite(state.currentRadius) || state.currentRadius <= 0 || state.currentRadius > 10) {
+            setObservationStatus('Coordenadas o radio fuera de rango (RA 0–360°, Dec −90–90°, radio >0–10°).', '');
+            return;
+        }
+        await initAladinViewer();
+        await searchObservations();
+    });
+    byId('layer-real')?.addEventListener('click', () => {
+        setActiveLayer('layer-real');
+        if (aladin) aladin.setImageSurvey('P/DSS2/color');
+    });
+    byId('layer-fits')?.addEventListener('click', () => {
+        setActiveLayer('layer-fits');
+        showSelectedObservation();
+    });
+    byId('btn-split')?.addEventListener('click', toggleSplitView);
+    byId('btn-blink')?.addEventListener('click', () => byId('blink-modal').classList.add('active'));
+    byId('blink-close-btn')?.addEventListener('click', () => {
+        byId('blink-modal').classList.remove('active');
+        stopBlink();
+    });
+    byId('blink-start-toggle')?.addEventListener('click', toggleBlink);
+    byId('btn-fs')?.addEventListener('click', toggleFullscreen);
+    byId('nav-objects-btn')?.addEventListener('click', () => {
+        byId('objects-modal').classList.add('active');
+        renderObservationList();
+    });
+    byId('objects-close-btn')?.addEventListener('click', () => byId('objects-modal').classList.remove('active'));
+    byId('epoch-range')?.addEventListener('input', (event) => {
+        state.currentIndex = Number(event.target.value);
+        showSelectedObservation();
+    });
+    byId('split-range-left')?.addEventListener('input', (event) => {
+        state.splitIndexLeft = Number(event.target.value);
+        updateSplitPane('left', state.splitIndexLeft);
+    });
+    byId('split-range-right')?.addEventListener('input', (event) => {
+        state.splitIndexRight = Number(event.target.value);
+        updateSplitPane('right', state.splitIndexRight);
     });
 }
 
-function initAladinViewer() {
+function setActiveLayer(id) {
+    ['layer-real', 'layer-fits'].forEach((buttonId) => byId(buttonId)?.classList.toggle('active', buttonId === id));
+}
+
+async function initAladinViewer() {
     if (aladin) {
         aladin.invalidateSize();
         return;
     }
-
-    A.init.then(() => {
+    if (!window.A?.init) {
+        setObservationStatus('No se pudo cargar Aladin Lite; comprueba la conexión al servicio CDS.', '');
+        return;
+    }
+    try {
+        await A.init;
         aladin = A.aladin('#aladin-lite-div', {
-            fov: state.currentRadius,
-            projection: "AIT",
-            cooFrame: 'equatorial',
-            showCooGridControl: true,
-            showSimbadPointerControl: true,
-            showCooGrid: true,
-            survey: "P/DSS2/color",
-            target: `${state.currentRA} ${state.currentDec}`
+            fov: state.currentRadius, projection: 'AIT', cooFrame: 'equatorial',
+            showCooGridControl: true, showSimbadPointerControl: true, showCooGrid: true,
+            survey: 'P/DSS2/color', target: `${state.currentRA} ${state.currentDec}`
         });
-
         aladin.on('positionChanged', (ra, dec) => {
-            const rElem = document.getElementById('hud-coords');
-            if (rElem) {
-                rElem.innerText = `RA: ${ra.toFixed(4)} | Dec: ${dec > 0 ? '+' : ''}${dec.toFixed(4)}`;
-            }
+            if (byId('hud-coords')) byId('hud-coords').textContent =
+                `RA: ${ra.toFixed(4)} | Dec: ${dec >= 0 ? '+' : ''}${dec.toFixed(4)}`;
         });
-    });
+        aladin.gotoRaDec(state.currentRA, state.currentDec);
+    } catch (error) {
+        console.error('Aladin initialization failed', error);
+        setObservationStatus('Error al iniciar el visor astronómico.', '');
+    }
 }
 
-function setupEventListeners() {
-    document.getElementById('explore-btn').addEventListener('click', () => {
-        document.getElementById('landing-view').classList.remove('active');
-        document.getElementById('explorer-view').classList.add('active');
-        
-        setTimeout(() => {
-            initAladinViewer();
-        }, 150);
-        
-        updateExplorerState();
+async function searchObservations() {
+    if (requestController) requestController.abort();
+    requestController = new AbortController();
+    setObservationStatus('Consultando el archivo IRSA…', 'Cargando');
+    const params = new URLSearchParams({
+        ra: String(state.currentRA), dec: String(state.currentDec), radius: String(state.currentRadius), limit: '100'
     });
-
-    document.getElementById('back-home').addEventListener('click', () => {
-        document.getElementById('explorer-view').classList.remove('active');
-        document.getElementById('landing-view').classList.add('active');
-    });
-
-    document.getElementById('search-form').addEventListener('submit', (e) => {
-        e.preventDefault();
-        state.currentRA = parseFloat(document.getElementById('input-ra').value);
-        state.currentDec = parseFloat(document.getElementById('input-dec').value);
-        state.currentRadius = parseFloat(document.getElementById('input-radius').value) || 10;
-
-        if (isSplitMode) {
-            updateSplitViewPane('left', state.splitIndexLeft);
-            updateSplitViewPane('right', state.splitIndexRight);
-        } else {
-            updateExplorerState();
+    try {
+        const response = await fetch(`${API}/api/observations?${params}`, { signal: requestController.signal });
+        const payload = await response.json();
+        if (!response.ok) throw new Error(payload.detail || `Error HTTP ${response.status}`);
+        observations = Array.isArray(payload.observations) ? payload.observations : [];
+        state.currentIndex = 0;
+        state.splitIndexLeft = 0;
+        state.splitIndexRight = Math.max(0, observations.length - 1);
+        updateObservationControls();
+        const demo = payload.is_demo === true;
+        const source = payload.source || 'Fuente no especificada';
+        const badge = byId('demo-indicator');
+        if (badge) {
+            badge.textContent = demo ? 'MODO DEMO — DATOS NO CIENTÍFICOS' : 'FUENTE: IRSA/IPAC TAP';
+            badge.setAttribute('aria-label', source);
         }
-    });
-
-    // Control de Capas
-    const layerRealBtn = document.getElementById('layer-real');
-    const layerFitsBtn = document.getElementById('layer-fits');
-
-    if (layerRealBtn) {
-        layerRealBtn.addEventListener('click', () => {
-            layerRealBtn.classList.add('active');
-            if (layerFitsBtn) layerFitsBtn.classList.remove('active');
-            if (aladin && !isSplitMode) aladin.setImageSurvey("P/DSS2/color");
-        });
-    }
-
-    if (layerFitsBtn) {
-        layerFitsBtn.addEventListener('click', () => {
-            layerFitsBtn.classList.add('active');
-            if (layerRealBtn) layerRealBtn.classList.remove('active');
-            if (!isSplitMode) updateExplorerState();
-        });
-    }
-
-    // Botón de Vista Dividida (Split View)
-    const btnSplit = document.getElementById('btn-split');
-    if (btnSplit) {
-        btnSplit.addEventListener('click', toggleSplitView);
-    }
-
-    // Botón de Blink Modal
-    const btnBlink = document.getElementById('btn-blink');
-    if (btnBlink) {
-        btnBlink.addEventListener('click', () => {
-            document.getElementById('blink-modal').classList.add('active');
-        });
-    }
-    document.getElementById('blink-close-btn').addEventListener('click', () => {
-        document.getElementById('blink-modal').classList.remove('active');
-        stopBlinkModal();
-    });
-
-    document.getElementById('blink-start-toggle').addEventListener('click', toggleBlinkModalAnimation);
-
-    document.getElementById('btn-fs').addEventListener('click', () => {
-        const stage = document.getElementById('visor-stage');
-        if (!document.fullscreenElement) stage.requestFullscreen().catch(err => console.error(err));
-        else document.exitFullscreen();
-    });
-
-    document.getElementById('nav-objects-btn').addEventListener('click', () => {
-        document.getElementById('objects-modal').classList.add('active');
-        queryBackendModal(state.currentRA, state.currentDec, state.currentRadius);
-    });
-    document.getElementById('objects-close-btn').addEventListener('click', () => {
-        document.getElementById('objects-modal').classList.remove('active');
-    });
-
-    // Deslizador inferior normal
-    const epochRange = document.getElementById('epoch-range');
-    if (epochRange) {
-        epochRange.addEventListener('input', (e) => {
-            state.currentEpochIndex = parseInt(e.target.value);
-            applyEpoch(state.currentEpochIndex);
-        });
-    }
-
-    // Deslizadores de la vista dividida
-    const rangeLeft = document.getElementById('split-range-left');
-    const rangeRight = document.getElementById('split-range-right');
-    if (rangeLeft) {
-        rangeLeft.addEventListener('input', (e) => {
-            state.splitIndexLeft = parseInt(e.target.value);
-            updateSplitViewPane('left', state.splitIndexLeft);
-        });
-    }
-    if (rangeRight) {
-        rangeRight.addEventListener('input', (e) => {
-            state.splitIndexRight = parseInt(e.target.value);
-            updateSplitViewPane('right', state.splitIndexRight);
-        });
+        setObservationStatus(demo ? 'DEMO — no son observaciones científicas reales.' : 'Conectado a IRSA/IPAC TAP',
+            `${payload.count ?? observations.length} observación(es)`);
+        updateSkyPosition();
+        renderObservationList();
+        showSelectedObservation();
+    } catch (error) {
+        if (error.name === 'AbortError') return;
+        observations = [];
+        updateObservationControls();
+        setObservationStatus(`No se pudieron consultar observaciones: ${error.message}`, 'Sin resultados disponibles');
+        const badge = byId('demo-indicator');
+        if (badge) badge.textContent = 'IRSA NO DISPONIBLE';
+        renderObservationList('IRSA no está disponible. No se muestran datos simulados como resultados.');
+        if (aladin) aladin.setImageSurvey('P/DSS2/color');
     }
 }
 
-// Alternar Vista Dividida (Split View)
+function updateSkyPosition() {
+    if (aladin) {
+        aladin.gotoRaDec(state.currentRA, state.currentDec);
+        aladin.setFov(state.currentRadius);
+    }
+    if (byId('info-radec')) byId('info-radec').textContent =
+        `${state.currentRA.toFixed(3)}, ${state.currentDec >= 0 ? '+' : ''}${state.currentDec.toFixed(3)}`;
+}
+
+function updateObservationControls() {
+    const range = byId('epoch-range');
+    if (range) {
+        range.min = '0';
+        range.max = String(Math.max(0, observations.length - 1));
+        range.value = String(Math.min(state.currentIndex, Math.max(0, observations.length - 1)));
+        range.disabled = observations.length < 2;
+    }
+    ['split-range-left', 'split-range-right'].forEach((id) => {
+        const slider = byId(id);
+        if (!slider) return;
+        slider.min = '0'; slider.max = String(Math.max(0, observations.length - 1));
+        slider.disabled = observations.length === 0;
+    });
+}
+
+function observationLabel(item) {
+    return item.obs_id || item.obs_publisher_did || item.target_name || `Observación ${state.currentIndex + 1}`;
+}
+
+function observationDate(item) {
+    return item.t_min ?? item.date_obs ?? item.obs_date ?? 'Fecha no disponible';
+}
+
+function observationUrl(item) {
+    const value = item.access_url;
+    if (typeof value !== 'string') return null;
+    try {
+        const url = new URL(value);
+        return url.protocol === 'https:' && url.hostname === 'irsa.ipac.caltech.edu' ? url.href : null;
+    } catch { return null; }
+}
+
+function showSelectedObservation() {
+    const item = observations[state.currentIndex];
+    if (!item) {
+        if (byId('info-epoch-label')) byId('info-epoch-label').textContent = 'Sin observación seleccionada';
+        if (byId('hud-survey')) byId('hud-survey').textContent = 'Atlas DSS2 — sin producto SPHEREx disponible';
+        if (byId('timeline-epoch-title')) byId('timeline-epoch-title').textContent = 'No hay épocas reales en estos resultados';
+        if (byId('hud-time-display')) byId('hud-time-display').textContent = '—';
+        if (aladin) aladin.setImageSurvey('P/DSS2/color');
+        return;
+    }
+    const label = observationLabel(item);
+    const date = observationDate(item);
+    if (byId('info-epoch-label')) byId('info-epoch-label').textContent = label;
+    if (byId('timeline-epoch-title')) byId('timeline-epoch-title').textContent = `OBSERVACIÓN: ${label}`;
+    if (byId('hud-time-display')) byId('hud-time-display').textContent = String(date);
+    if (byId('hud-survey')) byId('hud-survey').textContent = `IRSA: ${label}`;
+    updateSkyPosition();
+    const url = observationUrl(item);
+    if (url && aladin && byId('layer-fits')?.classList.contains('active')) {
+        try { aladin.displayImage(url, { name: label }); }
+        catch (error) { console.warn('Aladin cannot display this archive product', error); }
+    } else if (aladin && !byId('layer-fits')?.classList.contains('active')) {
+        aladin.setImageSurvey('P/DSS2/color');
+    }
+}
+
+function renderObservationList(message = '') {
+    const container = byId('objects-list-container');
+    if (!container) return;
+    container.replaceChildren();
+    if (message || observations.length === 0) {
+        const empty = document.createElement('p');
+        empty.className = 'doc-text';
+        empty.textContent = message || 'No se encontraron observaciones IRSA para esta búsqueda.';
+        container.appendChild(empty);
+        return;
+    }
+    observations.forEach((item, index) => {
+        const card = document.createElement('button');
+        card.type = 'button';
+        card.className = 'observation-card';
+        card.textContent = `${observationLabel(item)} — ${observationDate(item)} — RA ${item.s_ra ?? '—'}, Dec ${item.s_dec ?? '—'}`;
+        card.addEventListener('click', () => {
+            state.currentIndex = index;
+            if (byId('epoch-range')) byId('epoch-range').value = String(index);
+            byId('objects-modal').classList.remove('active');
+            showSelectedObservation();
+        });
+        container.appendChild(card);
+    });
+}
+
 function toggleSplitView() {
+    if (!observations.length) {
+        setObservationStatus('La vista dividida requiere al menos una observación devuelta por IRSA.', '');
+        return;
+    }
     isSplitMode = !isSplitMode;
-    const splitContainer = document.getElementById('split-view-container');
-    const singleContainer = document.getElementById('aladin-lite-div');
-    const normalTimeline = document.getElementById('normal-timeline');
-    const btnSplit = document.getElementById('btn-split');
-
-    if (isSplitMode) {
-        if (btnSplit) btnSplit.classList.add('active');
-        singleContainer.style.display = 'none';
-        normalTimeline.style.display = 'none';
-        splitContainer.style.display = 'grid';
-
-        setTimeout(() => {
-            if (!aladinLeft || !aladinRight) {
-                A.init.then(() => {
-                    aladinLeft = A.aladin('#aladin-left-div', {
-                        fov: state.currentRadius,
-                        projection: "AIT",
-                        survey: "P/DSS2/color",
-                        target: `${state.currentRA} ${state.currentDec}`
-                    });
-                    aladinRight = A.aladin('#aladin-right-div', {
-                        fov: state.currentRadius,
-                        projection: "AIT",
-                        survey: "P/DSS2/color",
-                        target: `${state.currentRA} ${state.currentDec}`
-                    });
-                    updateSplitViewPane('left', state.splitIndexLeft);
-                    updateSplitViewPane('right', state.splitIndexRight);
-                });
-            } else {
-                aladinLeft.invalidateSize();
-                aladinRight.invalidateSize();
-            }
-        }, 100);
-
-    } else {
-        if (btnSplit) btnSplit.classList.remove('active');
-        splitContainer.style.display = 'none';
-        singleContainer.style.display = 'block';
-        normalTimeline.style.display = 'flex';
-        if (aladin) aladin.invalidateSize();
-    }
+    byId('btn-split')?.classList.toggle('active', isSplitMode);
+    byId('aladin-lite-div').style.display = isSplitMode ? 'none' : 'block';
+    byId('normal-timeline').style.display = isSplitMode ? 'none' : 'flex';
+    byId('split-view-container').style.display = isSplitMode ? 'grid' : 'none';
+    if (isSplitMode) initSplitView();
+    else aladin?.invalidateSize();
 }
 
-function updateSplitViewPane(side, index) {
-    const epoch = state.epochs[index];
-    if (!epoch) return;
-
-    if (side === 'left' && aladinLeft) {
-        document.getElementById('split-left-title').innerText = `ÉPOCA A: ${epoch.time}`;
-        aladinLeft.gotoRaDec(state.currentRA, state.currentDec);
-        aladinLeft.setFov(state.currentRadius);
-        let url = `https://irsa.ipac.caltech.edu/ibe/data/spherex/qr2/level2/${epoch.folder}/${epoch.fitsName}`;
-        aladinLeft.displayImage(url, {name: epoch.fitsName});
-    } else if (side === 'right' && aladinRight) {
-        document.getElementById('split-right-title').innerText = `ÉPOCA B: ${epoch.time}`;
-        aladinRight.gotoRaDec(state.currentRA, state.currentDec);
-        aladinRight.setFov(state.currentRadius);
-        let url = `https://irsa.ipac.caltech.edu/ibe/data/spherex/qr2/level2/${epoch.folder}/${epoch.fitsName}`;
-        aladinRight.displayImage(url, {name: epoch.fitsName});
-    }
-}
-
-function applyEpoch(index) {
-    const epoch = state.epochs[index];
-    if (!epoch) return;
-
-    document.getElementById('timeline-epoch-title').innerText = `MINUTO ACTIVO: ${epoch.label} - ${epoch.time}`;
-    document.getElementById('hud-time-display').innerText = epoch.time;
-    document.getElementById('info-epoch-label').innerText = epoch.fitsName;
-
-    updateExplorerState();
-}
-
-function updateExplorerState() {
-    if (!aladin || isSplitMode) return;
-
-    aladin.gotoRaDec(state.currentRA, state.currentDec);
-    aladin.setFov(state.currentRadius);
-
-    document.getElementById('info-radec').innerText = `${state.currentRA.toFixed(3)}, ${state.currentDec > 0 ? '+' : ''}${state.currentDec.toFixed(3)}`;
-
-    const epoch = state.epochs[state.currentEpochIndex];
-    document.getElementById('hud-survey').innerText = `SPHEREx IBE: ${epoch.fitsName}`;
-
-    const fitsUrl = `https://irsa.ipac.caltech.edu/ibe/data/spherex/qr2/level2/${epoch.folder}/${epoch.fitsName}`;
-    aladin.displayImage(fitsUrl, { name: epoch.fitsName });
-
-    queryBackendObservations(state.currentRA, state.currentDec, state.currentRadius);
-}
-
-// Funcionalidad del Modal Blink (Parpadeo)
-function toggleBlinkModalAnimation() {
-    const btn = document.getElementById('blink-start-toggle');
-    if (isBlinkingActive) {
-        stopBlinkModal();
-        btn.innerText = "INICIAR BLINK";
-        btn.classList.remove('outline');
-    } else {
-        startBlinkModal();
-        btn.innerText = "DETENER BLINK";
-        btn.classList.add('outline');
-    }
-}
-
-function startBlinkModal() {
-    isBlinkingActive = true;
-    const idx1 = parseInt(document.getElementById('blink-epoch-1').value);
-    const idx2 = parseInt(document.getElementById('blink-epoch-2').value);
-    
-    const ep1 = state.epochs[idx1];
-    const ep2 = state.epochs[idx2];
-    const box = document.getElementById('blink-preview-box');
-    const label = document.getElementById('blink-status-label');
-
-    let alt = false;
-    blinkInterval = setInterval(() => {
-        alt = !alt;
-        const currentEp = alt ? ep1 : ep2;
-        label.innerText = alt ? `ÉPOCA 1 (${currentEp.time})` : `ÉPOCA 2 (${currentEp.time})`;
-        
-        // Efecto visual de transición por parpadeo
-        box.style.opacity = '0.4';
-        setTimeout(() => box.style.opacity = '1', 150);
-    }, 1000);
-}
-
-function stopBlinkModal() {
-    isBlinkingActive = false;
-    if (blinkInterval) {
-        clearInterval(blinkInterval);
-        blinkInterval = null;
-    }
-}
-
-async function queryBackendObservations(ra, dec, radius) {
-    const currentEpoch = state.epochs[state.currentEpochIndex];
+async function initSplitView() {
+    if (!window.A?.init) return;
     try {
-        const response = await fetch(`http://127.0.0.1:8000/api/observations?ra=${ra}&dec=${dec}&radius=${radius}&timestamp=${encodeURIComponent(currentEpoch.time)}&fits=${encodeURIComponent(currentEpoch.fitsName)}`);
-        if (!response.ok) throw new Error("Error en FastAPI");
-        
-        const data = await response.json();
-        const count = Array.isArray(data) ? data.length : (data.sources ? data.sources.length : 1);
-        
-        document.getElementById('info-count').innerText = `${count} fuente(s) detectada(s)`;
-        document.getElementById('info-status').innerText = "Conectado (OK)";
-    } catch (err) {
-        document.getElementById('info-status').innerText = "Sincronizado (Minuto Real)";
-        document.getElementById('info-count').innerText = `1 FITS (${currentEpoch.time})`;
-    }
-}
-
-async function queryBackendModal(ra, dec, radius) {
-    const container = document.getElementById('objects-list-container');
-    const currentEpoch = state.epochs[state.currentEpochIndex];
-    container.innerHTML = `<div style="color: var(--ylma-gold); text-align: center; padding: 20px;">Analizando RA: ${ra}, Dec: ${dec} en el minuto ${currentEpoch.time}...</div>`;
-
-    try {
-        const response = await fetch(`http://127.0.0.1:8000/api/observations?ra=${ra}&dec=${dec}&radius=${radius}&timestamp=${encodeURIComponent(currentEpoch.time)}&fits=${encodeURIComponent(currentEpoch.fitsName)}`);
-        const data = await response.json();
-        
-        container.innerHTML = '';
-        const items = Array.isArray(data) ? data : (data.sources || [data]);
-
-        if (items.length === 0) {
-            container.innerHTML = `<p style="color: #BDBDBD;">No se detectaron objetos en este minuto exacto.</p>`;
-            return;
-        }
-
-        items.forEach((item, index) => {
-            const card = document.createElement('div');
-            card.style.cssText = "background: #111; border: 1px solid rgba(255,183,0,0.3); padding: 12px; border-radius: 6px; display: flex; flex-direction: column; gap: 4px;";
-            card.innerHTML = `
-                <div style="display: flex; justify-content: space-between; font-weight: 700; color: var(--ylma-gold);">
-                    <span>#${index + 1} - ${item.name || 'Fuente SPHEREx'}</span>
-                    <span style="font-size: 0.75rem; color: #888;">Hora: ${currentEpoch.time}</span>
-                </div>
-                <div style="font-size: 0.8rem; color: #ccc;">Posición: RA ${ra} | Dec ${dec}</div>
-                <div style="font-size: 0.75rem; color: #888;">Archivo FITS: ${currentEpoch.fitsName}</div>
-            `;
-            container.appendChild(card);
+        await A.init;
+        if (!aladinLeft) aladinLeft = A.aladin('#aladin-left-div', {
+            fov: state.currentRadius, projection: 'AIT', survey: 'P/DSS2/color', target: `${state.currentRA} ${state.currentDec}`
         });
-    } catch (err) {
-        container.innerHTML = `
-            <div style="background: #111; border: 1px solid #FFB700; padding: 12px; border-radius: 6px;">
-                <div style="color: var(--ylma-gold); font-weight: 600;">Ubicación: RA ${ra}, Dec ${dec}</div>
-                <div style="font-size: 0.8rem; color: #ccc; margin-top: 4px;">Minuto activo: ${currentEpoch.label} - ${currentEpoch.time}</div>
-                <div style="font-size: 0.75rem; color: #888; margin-top: 2px;">Archivo: ${currentEpoch.fitsName}</div>
-            </div>
-        `;
+        if (!aladinRight) aladinRight = A.aladin('#aladin-right-div', {
+            fov: state.currentRadius, projection: 'AIT', survey: 'P/DSS2/color', target: `${state.currentRA} ${state.currentDec}`
+        });
+        aladinLeft.invalidateSize(); aladinRight.invalidateSize();
+        updateSplitPane('left', state.splitIndexLeft);
+        updateSplitPane('right', state.splitIndexRight);
+    } catch (error) {
+        console.error('Split view initialization failed', error);
+        setObservationStatus('No se pudo iniciar la vista dividida.', '');
     }
+}
+
+function updateSplitPane(side, index) {
+    const item = observations[index];
+    if (!item) return;
+    const viewer = side === 'left' ? aladinLeft : aladinRight;
+    const title = byId(side === 'left' ? 'split-left-title' : 'split-right-title');
+    if (title) title.textContent = `${side === 'left' ? 'ÉPOCA A' : 'ÉPOCA B'}: ${observationLabel(item)} — ${observationDate(item)}`;
+    if (!viewer) return;
+    viewer.gotoRaDec(state.currentRA, state.currentDec);
+    viewer.setFov(state.currentRadius);
+    const url = observationUrl(item);
+    if (url) {
+        try { viewer.displayImage(url, { name: observationLabel(item) }); }
+        catch (error) { console.warn('Unable to display IRSA product in Aladin', error); }
+    } else viewer.setImageSurvey('P/DSS2/color');
+}
+
+function toggleBlink() {
+    if (isBlinkingActive) { stopBlink(); return; }
+    if (observations.length < 2) {
+        const label = byId('blink-status-label');
+        if (label) label.textContent = 'Se requieren dos observaciones reales para comparar.';
+        return;
+    }
+    isBlinkingActive = true;
+    const button = byId('blink-start-toggle');
+    if (button) button.textContent = 'DETENER BLINK';
+    const first = byId('blink-epoch-1');
+    const second = byId('blink-epoch-2');
+    [first, second].forEach((select, idx) => {
+        if (!select) return;
+        select.replaceChildren();
+        observations.forEach((item, i) => {
+            const option = document.createElement('option');
+            option.value = String(i);
+            option.textContent = `${observationLabel(item)} — ${observationDate(item)}`;
+            select.appendChild(option);
+        });
+        select.value = String(idx === 0 ? 0 : observations.length - 1);
+    });
+    let flip = false;
+    const blinkOnce = () => {
+        flip = !flip;
+        const index = Number((flip ? first : second)?.value ?? 0);
+        const item = observations[index];
+        const label = byId('blink-status-label');
+        if (label && item) label.textContent = `${flip ? 'ÉPOCA 1' : 'ÉPOCA 2'}: ${observationLabel(item)} — ${observationDate(item)}`;
+        const url = item && observationUrl(item);
+        if (url && aladin) {
+            try { aladin.displayImage(url, { name: observationLabel(item) }); }
+            catch (error) { console.warn('Blink product display failed', error); }
+        }
+    };
+    blinkOnce();
+    blinkInterval = setInterval(blinkOnce, 1000);
+}
+
+function stopBlink() {
+    isBlinkingActive = false;
+    if (blinkInterval) clearInterval(blinkInterval);
+    blinkInterval = null;
+    const button = byId('blink-start-toggle');
+    if (button) button.textContent = 'INICIAR BLINK';
+}
+
+function toggleFullscreen() {
+    const stage = byId('visor-stage');
+    if (!document.fullscreenElement) stage?.requestFullscreen().catch((error) => console.warn('Fullscreen unavailable', error));
+    else document.exitFullscreen().catch((error) => console.warn('Could not exit fullscreen', error));
 }

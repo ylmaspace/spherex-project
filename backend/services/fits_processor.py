@@ -55,14 +55,14 @@ def process_fits_upload(filename: str, content: bytes) -> dict[str, Any]:
             if not WCS(header).has_celestial:
                 header = hdus[0].header.copy()
             wcs = WCS(header).celestial
-            if not wcs.has_celestial:
-                raise FITSProcessingError("El FITS no contiene WCS celestial: no se pueden calcular RA y Dec.")
             height, width = image.shape
             center_x, center_y = (width - 1) / 2, (height - 1) / 2
-            ra, dec = wcs.pixel_to_world_values(center_x, center_y)
-            ra, dec = float(ra) % 360.0, float(dec)
-            if not np.isfinite(ra) or not np.isfinite(dec) or not -90 <= dec <= 90:
-                raise FITSProcessingError("Las coordenadas WCS del FITS no son válidas.")
+            ra = dec = None
+            if wcs.has_celestial:
+                ra_value, dec_value = wcs.pixel_to_world_values(center_x, center_y)
+                ra, dec = float(ra_value) % 360.0, float(dec_value)
+                if not np.isfinite(ra) or not np.isfinite(dec) or not -90 <= dec <= 90:
+                    ra = dec = None
             # Produce a compact single-image FITS so Aladin displays the selected HDU,
             # even when the original product is a multi-extension FITS (MEF).
             fits.PrimaryHDU(data=np.asarray(image, dtype=np.float32), header=header).writeto(
@@ -93,8 +93,8 @@ def process_fits_upload(filename: str, content: bytes) -> dict[str, Any]:
             pixel_scales = np.abs(np.asarray(wcs.pixel_scale_matrix, dtype=float))
             try:
                 from astropy.wcs.utils import proj_plane_pixel_scales
-                scales = np.abs(proj_plane_pixel_scales(wcs)) * 3600.0
-                pixel_scale_arcsec = float(np.mean(scales))
+                scales = np.abs(proj_plane_pixel_scales(wcs)) * 3600.0 if wcs.has_celestial else []
+                pixel_scale_arcsec = float(np.mean(scales)) if len(scales) else None
             except Exception:
                 pixel_scale_arcsec = None
             original_path.unlink(missing_ok=True)
@@ -115,6 +115,7 @@ def process_fits_upload(filename: str, content: bytes) -> dict[str, Any]:
     except FITSProcessingError:
         original_path.unlink(missing_ok=True)
         display_path.unlink(missing_ok=True)
+        preview_path.unlink(missing_ok=True)
         raise
     except Exception as exc:
         original_path.unlink(missing_ok=True)

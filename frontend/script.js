@@ -11,6 +11,7 @@ let requestController = null;
 let activeLocalFitsUrl = null;
 let fitsLoadToken = 0;
 let skyMarkerLayer = null;
+let skyMarkerSources = [];
 let skyMarkersLoaded = false;
 let savedSkyRecords = [];
 const SKY_DB_NAME = 'ylma-spherex-atlas';
@@ -69,7 +70,7 @@ function setupEventListeners() {
         if (event.key === 'Enter' || event.key === ' ') { event.preventDefault(); byId('local-fits-input')?.click(); }
     });
     byId('local-fits-input')?.addEventListener('change', (event) => {
-        if (event.target.files?.[0]) loadLocalFits(event.target.files[0]);
+        if (event.target.files?.length) loadLocalFitsBatch(Array.from(event.target.files));
         event.target.value = '';
     });
     const dropzone = byId('fits-dropzone');
@@ -80,8 +81,8 @@ function setupEventListeners() {
         event.preventDefault(); dropzone.classList.remove('drag-active');
     }));
     dropzone?.addEventListener('drop', (event) => {
-        const file = event.dataTransfer?.files?.[0];
-        if (file) loadLocalFits(file);
+        const files = Array.from(event.dataTransfer?.files || []);
+        if (files.length) loadLocalFitsBatch(files);
     });
     byId('catalog-query')?.addEventListener('keydown', (event) => { if (event.key === 'Enter') loadCatalog(); });
     byId('catalog-path')?.addEventListener('keydown', (event) => { if (event.key === 'Enter') loadCatalog(); });
@@ -256,16 +257,20 @@ async function loadSavedSkyMap() {
 
 function rebuildSkyMarkers() {
     if (!aladin || !window.A?.catalog || !window.A?.marker) return;
-    if (skyMarkerLayer) {
-        try { aladin.removeCatalog(skyMarkerLayer); } catch (_) {}
+    if (!skyMarkerLayer) {
+        skyMarkerLayer = A.catalog({ name: 'YLMA · Mis imágenes FITS', shape: 'cross', color: '#ffb700', sourceSize: 13 });
+        aladin.addCatalog(skyMarkerLayer);
     }
-    skyMarkerLayer = A.catalog({ name: 'YLMA · Mis imágenes FITS', shape: 'cross', color: '#ffb700', sourceSize: 13 });
-    aladin.addCatalog(skyMarkerLayer);
+    skyMarkerSources.forEach((source) => {
+        try { skyMarkerLayer.remove(source); } catch (_) {}
+    });
+    skyMarkerSources = [];
     savedSkyRecords.forEach((record) => {
         const marker = A.marker(Number(record.ra), Number(record.dec), {
-            popupTitle: record.filename,
-            popupDesc: `RA: ${Number(record.ra).toFixed(6)}°<br>Dec: ${Number(record.dec).toFixed(6)}°<br>HDU: ${record.hdu_index}`
+            popupTitle: String(record.filename).slice(0, 150),
+            popupDesc: `RA: ${Number(record.ra).toFixed(6)}°<br>Dec: ${Number(record.dec).toFixed(6)}°<br>HDU: ${Number(record.hdu_index)}`
         });
+        skyMarkerSources.push(marker);
         skyMarkerLayer.addSources(marker);
     });
     skyMarkersLoaded = true;
@@ -303,6 +308,19 @@ function updateSkyCoordinates(result) {
         `${state.currentRA.toFixed(5)}°, ${state.currentDec >= 0 ? '+' : ''}${state.currentDec.toFixed(5)}°`;
     aladin?.gotoRaDec(state.currentRA, state.currentDec);
     aladin?.setFov(state.currentRadius);
+}
+
+async function loadLocalFitsBatch(files) {
+    const fitsFiles = files.filter((file) => /\\.(fits?|fts)$/i.test(file.name || ''));
+    if (!fitsFiles.length) {
+        setObservationStatus('No se encontraron archivos FITS válidos en la selección.', '');
+        return;
+    }
+    for (let index = 0; index < fitsFiles.length; index += 1) {
+        showFitsProgress('CREANDO TU MAPA CELESTE', `Procesando imagen ${index + 1} de ${fitsFiles.length}: ${fitsFiles[index].name}`, 0);
+        await loadLocalFits(fitsFiles[index]);
+    }
+    setObservationStatus(`Mapa actualizado: ${fitsFiles.length} FITS procesado(s).`, `${savedSkyRecords.length} imágenes guardadas`);
 }
 
 async function loadLocalFits(file, existingRecordId = null) {

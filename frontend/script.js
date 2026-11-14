@@ -201,10 +201,14 @@ function initLocalFitsControls() {
     viewport?.addEventListener('mousemove', (event) => {
         if (!image?.naturalWidth || !image?.naturalHeight) return;
         const rect = image.getBoundingClientRect();
-        if (!rect.width || !rect.height) return;
-        const x = Math.max(0, Math.min(image.naturalWidth - 1, Math.floor((event.clientX - rect.left) / rect.width * image.naturalWidth)));
-        const y = Math.max(0, Math.min(image.naturalHeight - 1, Math.floor((event.clientY - rect.top) / rect.height * image.naturalHeight)));
         const readout = byId('fits-local-pixel-coords');
+        if (!rect.width || !rect.height) return;
+        if (event.clientX < rect.left || event.clientX > rect.right || event.clientY < rect.top || event.clientY > rect.bottom) {
+            if (readout) readout.textContent = 'PIXEL X — · Y —';
+            return;
+        }
+        const x = Math.min(image.naturalWidth - 1, Math.floor((event.clientX - rect.left) / rect.width * image.naturalWidth));
+        const y = Math.min(image.naturalHeight - 1, Math.floor((event.clientY - rect.top) / rect.height * image.naturalHeight));
         if (readout) readout.textContent = 'PIXEL X ' + x + ' · Y ' + y;
     });
     viewport?.addEventListener('mouseleave', () => {

@@ -49,6 +49,26 @@ function setupEventListeners() {
         byId('landing-view').classList.add('active');
     });
     byId('catalog-search-btn')?.addEventListener('click', loadCatalog);
+    byId('select-fits-btn')?.addEventListener('click', () => byId('local-fits-input')?.click());
+    byId('fits-dropzone')?.addEventListener('click', () => byId('local-fits-input')?.click());
+    byId('fits-dropzone')?.addEventListener('keydown', (event) => {
+        if (event.key === 'Enter' || event.key === ' ') { event.preventDefault(); byId('local-fits-input')?.click(); }
+    });
+    byId('local-fits-input')?.addEventListener('change', (event) => {
+        if (event.target.files?.[0]) loadLocalFits(event.target.files[0]);
+        event.target.value = '';
+    });
+    const dropzone = byId('fits-dropzone');
+    ['dragenter', 'dragover'].forEach((name) => dropzone?.addEventListener(name, (event) => {
+        event.preventDefault(); dropzone.classList.add('drag-active');
+    }));
+    ['dragleave', 'drop'].forEach((name) => dropzone?.addEventListener(name, (event) => {
+        event.preventDefault(); dropzone.classList.remove('drag-active');
+    }));
+    dropzone?.addEventListener('drop', (event) => {
+        const file = event.dataTransfer?.files?.[0];
+        if (file) loadLocalFits(file);
+    });
     byId('catalog-query')?.addEventListener('keydown', (event) => { if (event.key === 'Enter') loadCatalog(); });
     byId('catalog-path')?.addEventListener('keydown', (event) => { if (event.key === 'Enter') loadCatalog(); });
     byId('search-form')?.addEventListener('submit', async (event) => {
@@ -109,6 +129,48 @@ function setupEventListeners() {
     });
 }
 
+async function loadLocalFits(file) {
+    const name = String(file.name || '');
+    if (!/\\.(fits?|fts)(\\.gz)?$/i.test(name)) {
+        setObservationStatus('Formato no válido. Selecciona un archivo FITS.', '');
+        return;
+    }
+    if (file.size > 50 * 1024 * 1024) {
+        setObservationStatus('El archivo supera el límite de 50 MB para la carga local en el navegador.', '');
+        return;
+    }
+    await initAladinViewer();
+    if (!aladin || typeof aladin.displayFITS !== 'function') {
+        setObservationStatus('La versión cargada de Aladin Lite no permite abrir FITS en este visor.', '');
+        return;
+    }
+    setObservationStatus(`Leyendo FITS local: ${name}…`, 'Procesando');
+    const reader = new FileReader();
+    reader.onerror = () => setObservationStatus('No se pudo leer el archivo seleccionado.', '');
+    reader.onload = () => {
+        try {
+            aladin.displayFITS(
+                String(reader.result),
+                { name },
+                () => {
+                    setActiveLayer('layer-fits');
+                    if (byId('info-epoch-label')) byId('info-epoch-label').textContent = name;
+                    if (byId('hud-survey')) byId('hud-survey').textContent = 'FITS LOCAL';
+                    setObservationStatus(`FITS local cargado: ${name}`, 'Archivo del usuario');
+                },
+                (error) => {
+                    console.error('Local FITS display failed', error);
+                    setObservationStatus('Aladin no pudo interpretar este FITS. Puede ser un MEF o una extensión no compatible.', '');
+                }
+            );
+        } catch (error) {
+            console.error('Local FITS display failed', error);
+            setObservationStatus(`No se pudo abrir el FITS: ${error.message}`, '');
+        }
+    };
+    reader.readAsDataURL(file);
+}
+
 function parseObservationIndex(value) {
     if (!/^\d+$/.test(String(value).trim()) || observations.length === 0) return null;
     const oneBased = Number(value);
@@ -167,7 +229,7 @@ async function searchObservations() {
         const source = payload.source || 'Fuente no especificada';
         const badge = byId('demo-indicator');
         if (badge) {
-            badge.textContent = demo ? 'MODO DEMO — DATOS NO CIENTÍFICOS' : 'FUENTE: IRSA/IPAC TAP';
+            badge.textContent = demo ? 'MODO DEMO — DATOS NO CIENTÍFICOS' : 'FUENTE: IRSA SIA2 DR1 + QR3';
             badge.setAttribute('aria-label', source);
         }
         setObservationStatus(demo ? 'DEMO — no son observaciones científicas reales.' : 'Conectado a IRSA/IPAC TAP',
@@ -181,7 +243,7 @@ async function searchObservations() {
         updateObservationControls();
         setObservationStatus(`No se pudieron consultar observaciones: ${error.message}`, 'Sin resultados disponibles');
         const badge = byId('demo-indicator');
-        if (badge) badge.textContent = 'IRSA NO DISPONIBLE';
+        if (badge) badge.textContent = 'IRSA SIA2 NO DISPONIBLE';
         renderObservationList('IRSA no está disponible. No se muestran datos simulados como resultados.');
         if (aladin) aladin.setImageSurvey('P/DSS2/color');
     }

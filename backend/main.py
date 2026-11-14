@@ -1,3 +1,5 @@
+import gzip
+import io
 import logging
 import os
 import time
@@ -171,7 +173,19 @@ async def import_fits_directory(payload: dict = Body(...)):
                 errors.append({"filename": filename, "error": "Se ha superado el límite de 120 MB por archivo o 600 MB por lote."})
                 continue
             total_bytes += len(content)
-            processed = process_fits_upload(filename, bytes(content))
+            fits_content = bytes(content)
+            processing_filename = filename
+            if filename.lower().endswith(".gz"):
+                try:
+                    with gzip.GzipFile(fileobj=io.BytesIO(fits_content), mode="rb") as compressed:
+                        fits_content = compressed.read(MAX_UPLOAD_BYTES + 1)
+                except (OSError, EOFError) as exc:
+                    raise FITSProcessingError("El FITS comprimido no es un archivo GZIP válido.") from exc
+                if len(fits_content) > MAX_UPLOAD_BYTES:
+                    raise FITSProcessingError("El FITS descomprimido supera el límite de 120 MB.")
+                processing_filename = filename[:-3]
+            processed = process_fits_upload(processing_filename, fits_content)
+            processed["filename"] = filename[:180]
             processed.pop("display_path", None)
             processed.pop("preview_path", None)
             processed["display_url"] = f"/api/fits/local/{processed['id']}"

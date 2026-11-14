@@ -1,7 +1,5 @@
-"""Tests for the live-only IRSA integration. Network responses are mocked here."""
-import asyncio
+from __future__ import annotations
 
-import httpx
 import pytest
 
 from backend.services.irsa import (

@@ -140,7 +140,7 @@
                     <div class="info-grid" id="object-info-grid">
                         <div class="info-row">
                             <span class="info-key">Estado API</span>
-                            <span class="info-val ylma-status" id="info-status">Conectado (/api)</span>
+                            <span class="info-val ylma-status" id="info-status">Esperando consulta IRSA</span>
                         </div>
                         <div class="info-row">
                             <span class="info-key">Coordenadas Centro</span>
@@ -148,13 +148,25 @@
                         </div>
                         <div class="info-row">
                             <span class="info-key">Archivo FITS Activo</span>
-                            <span class="info-val" id="info-epoch-label">level2_20260901_0000_spx.fits</span>
+                            <span class="info-val" id="info-epoch-label">Ningún producto seleccionado</span>
                         </div>
                         <div class="info-row">
-                            <span class="info-key">Fuentes en Minuto</span>
+                            <span class="info-key">Observaciones IRSA</span>
                             <span class="info-val" id="info-count">0 fuentes</span>
                         </div>
                     </div>
+                </div>
+
+                <div class="panel-section catalog-panel">
+                    <h3 class="panel-title">CATÁLOGO OFICIAL QR2 LEVEL 2</h3>
+                    <p class="doc-text">Navega por los directorios publicados por IRSA. Solo se mostrarán archivos encontrados en el listado oficial.</p>
+                    <label class="catalog-label" for="catalog-path">Directorio relativo</label>
+                    <input id="catalog-path" class="catalog-input" type="text" value="" placeholder="Raíz del catálogo">
+                    <label class="catalog-label" for="catalog-query">Filtrar nombre</label>
+                    <input id="catalog-query" class="catalog-input" type="text" placeholder="Buscar FITS…">
+                    <button id="catalog-search-btn" class="ylma-btn primary-gold catalog-search-btn" type="button">EXPLORAR CATÁLOGO</button>
+                    <div id="catalog-status" class="doc-text" role="status" aria-live="polite">Catálogo sin consultar.</div>
+                    <div id="catalog-results" class="catalog-results"></div>
                 </div>
 
                 <div class="panel-section">

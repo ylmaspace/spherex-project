@@ -103,6 +103,8 @@ async function loadSelectedFiles() {
     if (files.length > MAX_FILES) { setStatus('El límite inicial es de ' + MAX_FILES + ' FITS por lote.', 0); return; }
     const invalid = files.find(file => !/\.(fits?|fts)$/i.test(file.name) || !file.size || file.size > MAX_BYTES);
     if (invalid) { setStatus('Archivo no válido o superior a 120 MB: ' + invalid.name, 0); return; }
+    const totalBytes = files.reduce((sum, file) => sum + file.size, 0);
+    if (totalBytes > MAX_BATCH_BYTES) { setStatus('El lote supera el límite de 600 MB. Divide la selección en varios lotes.', 0); return; }
     stopBlink();
     $('multi-load-btn').disabled = true;
     try {

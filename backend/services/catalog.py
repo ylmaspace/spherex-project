@@ -233,3 +233,41 @@ class IRSAFileCatalog:
         except Exception:
             await client.aclose()
             raise
+
+    async def stream_access_url(self, access_url: str, range_header: str | None = None):
+        """Stream a FITS product returned by the official SPHEREx SIA2 service."""
+        parsed = urlparse(access_url)
+        if (parsed.scheme != "https" or parsed.hostname != _ALLOWED_HOST
+                or not parsed.path.startswith("/ibe/data/spherex/")
+                or not parsed.path.lower().endswith(_FITS_SUFFIXES)
+                or parsed.username or parsed.password):
+            raise ValueError("Only official IRSA SPHEREx FITS access URLs are accepted")
+        headers = {"Range": range_header} if range_header and re.fullmatch(r"bytes=\d*-\d*", range_header) else {}
+        client = httpx.AsyncClient(timeout=self.timeout, follow_redirects=True)
+        try:
+            response = await client.send(client.build_request("GET", access_url, headers=headers), stream=True)
+            final = urlparse(str(response.url))
+            if (final.scheme != "https" or final.hostname != _ALLOWED_HOST
+                    or not final.path.startswith("/ibe/data/spherex/")
+                    or not final.path.lower().endswith(_FITS_SUFFIXES)):
+                await response.aclose()
+                raise CatalogError("SIA2 product redirected outside the official SPHEREx archive")
+            if response.status_code not in (200, 206):
+                status = response.status_code
+                await response.aclose()
+                raise CatalogError(f"IRSA SIA2 product returned HTTP {status}")
+
+            async def chunks():
+                try:
+                    async for chunk in response.aiter_bytes():
+                        yield chunk
+                finally:
+                    await response.aclose()
+                    await client.aclose()
+            return response, chunks()
+        except httpx.HTTPError as exc:
+            await client.aclose()
+            raise CatalogError("Could not retrieve the SIA2 FITS product from IRSA") from exc
+        except Exception:
+            await client.aclose()
+            raise

@@ -395,9 +395,30 @@ async function loadFitsFromUrl() {
         const declaredSize = Number(response.headers.get('content-length') || 0);
         if (declaredSize > 120 * 1024 * 1024) throw new Error('El FITS supera el límite de 120 MB.');
         showFitsProgress('DESCARGANDO FITS DESDE IRSA', filename, 45);
-        const blob = await response.blob();
-        if (!blob.size) throw new Error('IRSA devolvió un archivo vacío.');
-        if (blob.size > 120 * 1024 * 1024) throw new Error('El FITS supera el límite de 120 MB.');
+        const reader = response.body?.getReader();
+        if (!reader) throw new Error('El navegador no permite leer la descarga de IRSA.');
+        const chunks = [];
+        let received = 0;
+        try {
+            while (true) {
+                const part = await reader.read();
+                if (part.done) break;
+                received += part.value.byteLength;
+                if (received > 120 * 1024 * 1024) {
+                    await reader.cancel();
+                    throw new Error('El FITS supera el límite de 120 MB.');
+                }
+                chunks.push(part.value);
+                const percent = declaredSize > 0
+                    ? Math.min(75, 45 + received / declaredSize * 30)
+                    : Math.min(70, 45 + received / (120 * 1024 * 1024) * 25);
+                showFitsProgress('DESCARGANDO FITS DESDE IRSA', filename + ' · ' + (received / 1048576).toFixed(1) + ' MB', percent);
+            }
+        } finally {
+            reader.releaseLock();
+        }
+        if (!received) throw new Error('IRSA devolvió un archivo vacío.');
+        const blob = new Blob(chunks, { type: response.headers.get('content-type') || 'application/fits' });
         if (blob.type.includes('text/html')) throw new Error('IRSA devolvió una página web en lugar de un FITS.');
         showFitsProgress('PROCESANDO FITS REMOTO', filename + ' · ' + (blob.size / 1048576).toFixed(1) + ' MB', 78);
         const file = new File([blob], filename, { type: 'application/fits', lastModified: Date.now() });

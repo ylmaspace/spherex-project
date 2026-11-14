@@ -118,7 +118,7 @@ async def get_catalog(
         raise HTTPException(status_code=400, detail=str(exc)) from exc
     except CatalogError as exc:
         logger.warning("IRSA catalog unavailable: %s", exc)
-        raise HTTPException(status_code=503, detail="El catálogo QR2 Level 2 de IRSA no está disponible.") from exc
+        raise HTTPException(status_code=503, detail="El directorio oficial de SPHEREx en IRSA no está disponible.") from exc
 
 
 @app.post("/api/fits/upload")

@@ -68,7 +68,7 @@
                 </div>
                 <button type="submit" id="search-btn" class="ylma-btn primary-gold">CONSULTAR IBE</button>
             </form>
-            <div class="demo-badge-indicator" id="demo-indicator">SPLIT & BLINK ACTIVE</div>
+            <div class="demo-badge-indicator" id="demo-indicator">FUENTE CIENTÍFICA IRSA</div>
         </section>
 
         <!-- MAIN WORKSPACE -->
@@ -103,14 +103,14 @@
                             <div id="aladin-left-div" class="split-map"></div>
                             <div class="split-hud-bar">
                                 <span id="split-left-title">ÉPOCA A: 00:00:00</span>
-                                <input type="range" id="split-range-left" min="0" max="59" value="0" step="1">
+                                <input type="text" inputmode="numeric" pattern="[0-9]*" id="split-index-left" class="epoch-index-input" value="1" aria-label="Índice de observación de la época A">
                             </div>
                         </div>
                         <div class="split-pane">
                             <div id="aladin-right-div" class="split-map"></div>
                             <div class="split-hud-bar">
                                 <span id="split-right-title">ÉPOCA B: 00:30:00</span>
-                                <input type="range" id="split-range-right" min="0" max="59" value="30" step="1">
+                                <input type="text" inputmode="numeric" pattern="[0-9]*" id="split-index-right" class="epoch-index-input" value="1" aria-label="Índice de observación de la época B">
                             </div>
                         </div>
                     </div>
@@ -127,7 +127,7 @@
                             <div class="timeline-clock-display" id="hud-time-display">00:00:00</div>
                         </div>
                         <div class="curved-slider-container">
-                            <input type="range" id="epoch-range" min="0" max="59" value="0" step="1">
+                            <label class="sr-only" for="epoch-index">Número de observación</label><input type="text" inputmode="numeric" pattern="[0-9]*" id="epoch-index" class="epoch-index-input" value="1" aria-label="Número de observación seleccionada">
                         </div>
                     </div>
                 </div>
@@ -162,7 +162,7 @@
                     <p class="doc-text">
                         Sincronización avanzada con Vista Dividida Dual e interpolación parpadeante Blink para análisis diferencial.
                     </p>
-                    <a href="http://127.0.0.1:8000/docs" target="_blank" class="ylma-link">Abrir documentación FastAPI &rarr;</a>
+                    <a href="/docs" target="_blank" class="ylma-link">Abrir documentación FastAPI &rarr;</a>
                 </div>
             </div>
 

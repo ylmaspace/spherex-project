@@ -1,19 +1,14 @@
-"""Verified IRSA TAP client for SPHEREx ObsCore observations.
-
-The service discovers tables and columns through TAP_SCHEMA at runtime and never
-falls back to fabricated/demo observations.
-"""
+"""SPHEREx image search using IRSA's current Simple Image Access v2 service."""
 from __future__ import annotations
 
 import logging
 import os
-import re
 from typing import Any
 
 import httpx
 
 logger = logging.getLogger(__name__)
-TAP_SYNC_URL = "https://irsa.ipac.caltech.edu/TAP/sync"
+SIA_URL = "https://irsa.ipac.caltech.edu/SIA"
 
 
 class IRSAError(RuntimeError):
@@ -25,15 +20,15 @@ class IRSAConnectionError(IRSAError):
 
 
 class IRSATAPQueryError(IRSAError):
-    """IRSA rejected a TAP query."""
+    """IRSA rejected a query."""
 
 
 class IRSATableNotFoundError(IRSAError):
-    """No supported SPHEREx ObsCore table was found."""
+    """Kept for backwards compatibility with older callers."""
 
 
 class IRSAIncompatibleSchemaError(IRSAError):
-    """The discovered table does not expose the required ObsCore columns."""
+    """IRSA returned an unsupported result schema."""
 
 
 class ObservationNotFoundError(IRSAError):
@@ -41,126 +36,137 @@ class ObservationNotFoundError(IRSAError):
 
 
 class IRSAService:
-    TABLE_CANDIDATES = (("spherex", "obscore"), ("ivoa", "obscore"))
-    REQUIRED_COORDINATES = ("s_ra", "s_dec")
+    # QR2 is deliberately excluded: IRSA retired QR2 from searchable services in Nov 2026.
+    COLLECTIONS = (
+        "spherex_dr1",
+        "spherex_dr1_deep",
+        "spherex_qr3",
+        "spherex_qr3_deep",
+    )
 
     def __init__(self) -> None:
-        self.timeout = max(3.0, float(os.getenv("IRSA_TIMEOUT_SECONDS", "20")))
+        self.timeout = max(3.0, float(os.getenv("IRSA_TIMEOUT_SECONDS", "25")))
         self.max_results = min(500, max(1, int(os.getenv("IRSA_MAX_RESULTS", "100"))))
-        # Demo data is deliberately unsupported: the public API must never disguise it as science data.
         self.demo_mode = False
-        self._table: tuple[str, str] | None = None
-        self._columns: set[str] | None = None
 
-    async def _tap(self, adql: str) -> list[dict[str, Any]]:
-        payload = {"REQUEST": "doQuery", "LANG": "ADQL", "FORMAT": "json", "QUERY": adql}
+    async def _query_collection(self, collection: str, ra: float, dec: float,
+                                radius: float, limit: int) -> list[dict[str, Any]]:
+        params = {
+            "COLLECTION": collection,
+            "POS": f"circle {ra:.8f} {dec:.8f} {radius:.8f}",
+            "RESPONSEFORMAT": "JSON",
+            "MAXREC": str(limit),
+        }
         try:
             async with httpx.AsyncClient(timeout=self.timeout, follow_redirects=True) as client:
-                response = await client.post(TAP_SYNC_URL, data=payload,
-                    headers={"Accept": "application/json", "User-Agent": "YLMA-SPHEREx-Explorer/1.0"})
+                response = await client.get(
+                    SIA_URL, params=params,
+                    headers={"Accept": "application/json", "User-Agent": "YLMA-SPHEREx-Explorer/2.0"},
+                )
                 response.raise_for_status()
         except httpx.HTTPStatusError as exc:
-            body = exc.response.text[:500]
-            logger.warning("IRSA TAP HTTP %s: %s", exc.response.status_code, body)
-            raise IRSATAPQueryError(f"IRSA TAP returned HTTP {exc.response.status_code}") from exc
+            logger.warning("IRSA SIA2 HTTP %s for %s: %s",
+                           exc.response.status_code, collection, exc.response.text[:400])
+            raise IRSATAPQueryError(
+                f"IRSA SIA2 returned HTTP {exc.response.status_code} for {collection}"
+            ) from exc
         except httpx.HTTPError as exc:
-            logger.warning("IRSA TAP connection failed: %s", exc)
-            raise IRSAConnectionError("Could not connect to the official IRSA TAP service") from exc
+            logger.warning("IRSA SIA2 connection failed for %s: %s", collection, exc)
+            raise IRSAConnectionError("Could not connect to the official IRSA SIA2 service") from exc
+
         try:
             document = response.json()
         except ValueError as exc:
-            raise IRSAConnectionError("IRSA TAP returned a non-JSON response") from exc
-        if not isinstance(document, dict) or not isinstance(document.get("data"), list):
-            raise IRSAConnectionError("IRSA TAP returned an unexpected response schema")
-        fields = document.get("metadata") or []
-        names = [str(field.get("name", "")) for field in fields if isinstance(field, dict)]
-        rows = []
-        for values in document["data"]:
-            if isinstance(values, dict):
-                rows.append(values)
-            elif isinstance(values, list) and names and len(values) == len(names):
-                rows.append(dict(zip(names, values)))
-            else:
-                raise IRSAConnectionError("IRSA TAP returned rows with an incompatible schema")
-        return rows
+            raise IRSAIncompatibleSchemaError("IRSA SIA2 returned a non-JSON response") from exc
 
-    async def _discover_table(self) -> tuple[str, str, set[str]]:
-        if self._table and self._columns:
-            return self._table[0], self._table[1], self._columns
+        if isinstance(document, list):
+            return [row for row in document if isinstance(row, dict)]
+        if not isinstance(document, dict):
+            raise IRSAIncompatibleSchemaError("IRSA SIA2 returned an unsupported JSON structure")
 
-        # TAP_SCHEMA.tables exposes schema_name and the canonical table_name.
-        # TAP_SCHEMA.columns has table_name but does NOT define schema_name;
-        # use the exact table_name advertised by TAP_SCHEMA.tables to join them.
-        rows = await self._tap(
-            "SELECT schema_name, table_name FROM TAP_SCHEMA.tables "
-            "WHERE LOWER(table_name) LIKE '%obscore%'"
-        )
-        candidates = []
-        allowed_schemas = {schema for schema, _ in self.TABLE_CANDIDATES}
-        for row in rows:
-            schema = str(row.get("schema_name", "")).strip()
-            table_name = str(row.get("table_name", "")).strip()
-            bare_name = table_name.rsplit(".", 1)[-1].strip('"').lower()
-            if schema.lower() not in allowed_schemas or bare_name != "obscore":
-                continue
-            if not re.fullmatch(r'[A-Za-z0-9_."-]+', schema) or not re.fullmatch(r'[A-Za-z0-9_."-]+', table_name):
-                logger.warning("Ignoring unexpected TAP table identifier from metadata")
-                continue
-            candidates.append((schema, table_name))
-
-        for schema, metadata_table_name in candidates:
-            escaped_table = metadata_table_name.replace("'", "''")
-            column_rows = await self._tap(
-                "SELECT column_name FROM TAP_SCHEMA.columns "
-                f"WHERE LOWER(table_name) = LOWER('{escaped_table}')"
-            )
-            columns = {str(row.get("column_name", "")).lower() for row in column_rows}
-            if all(column in columns for column in self.REQUIRED_COORDINATES):
-                query_table = metadata_table_name
-                if "." not in query_table:
-                    query_table = f"{schema}.{query_table}"
-                self._table, self._columns = (schema, query_table), columns
-                return schema, query_table, columns
+        # IRSA JSON tables normally expose metadata + row arrays; accept object rows too.
+        rows = document.get("data")
+        if rows is None and isinstance(document.get("results"), list):
+            rows = document["results"]
+        if not isinstance(rows, list):
+            if document.get("status") == "OK" and not rows:
+                return []
+            raise IRSAIncompatibleSchemaError("IRSA SIA2 response has no tabular data")
 
         if not rows:
-            raise IRSATableNotFoundError("No ObsCore table was advertised by IRSA TAP_SCHEMA")
-        raise IRSAIncompatibleSchemaError("IRSA ObsCore tables do not expose s_ra and s_dec")
+            return []
+        if all(isinstance(row, dict) for row in rows):
+            return rows
+
+        metadata = document.get("metadata") or document.get("fields") or []
+        names = []
+        for field in metadata:
+            if isinstance(field, dict):
+                names.append(str(field.get("name") or field.get("column_name") or ""))
+            elif isinstance(field, str):
+                names.append(field)
+        if not names or any(not isinstance(row, list) or len(row) != len(names) for row in rows):
+            raise IRSAIncompatibleSchemaError("IRSA SIA2 returned rows with incompatible metadata")
+        return [dict(zip(names, row)) for row in rows]
 
     async def query_observations(self, ra: float, dec: float, radius: float,
                                  limit: int | None = None) -> dict[str, Any]:
-        if not (0 <= float(ra) <= 360 and -90 <= float(dec) <= 90 and 0 < float(radius) <= 10):
+        ra, dec, radius = float(ra), float(dec), float(radius)
+        if not (0 <= ra <= 360 and -90 <= dec <= 90 and 0 < radius <= 10):
             raise ValueError("RA, Dec or search radius is outside the supported range")
-        schema, table, columns = await self._discover_table()
         safe_limit = min(self.max_results, max(1, int(limit or self.max_results)))
-        selected = ["*"]
-        where = (
-            f"CONTAINS(POINT('ICRS', s_ra, s_dec), "
-            f"CIRCLE('ICRS', {float(ra):.8f}, {float(dec):.8f}, {float(radius):.8f})) = 1"
+        # Search each current public collection independently so one unavailable
+        # collection cannot hide results from the others.
+        import asyncio
+        results = await asyncio.gather(
+            *(self._query_collection(collection, ra, dec, radius, safe_limit)
+              for collection in self.COLLECTIONS),
+            return_exceptions=True,
         )
-        adql = f"SELECT TOP {safe_limit} {', '.join(selected)} FROM {table} WHERE {where}"
-        if "t_min" in columns:
-            adql += " ORDER BY t_min DESC"
-        rows = await self._tap(adql)
+        observations: list[dict[str, Any]] = []
+        failures: list[BaseException] = []
+        for collection, result in zip(self.COLLECTIONS, results):
+            if isinstance(result, BaseException):
+                failures.append(result)
+                continue
+            for row in result:
+                normalized = {str(key).lower(): value for key, value in row.items()}
+                normalized.setdefault("collection", collection)
+                # The frontend uses these standard ObsCore-like display fields.
+                if normalized.get("obs_id") is None:
+                    normalized["obs_id"] = normalized.get("obs_publisher_did") or normalized.get("obs_title")
+                observations.append(normalized)
+
+        if failures and not observations:
+            first = failures[0]
+            if isinstance(first, IRSAError):
+                raise first
+            raise IRSAConnectionError("All IRSA SIA2 collection queries failed") from first
+
+        # Deduplicate by the stable archive URL / publisher identifier.
+        unique: dict[str, dict[str, Any]] = {}
+        for index, row in enumerate(observations):
+            key = str(row.get("access_url") or row.get("obs_publisher_did") or row.get("obs_id") or index)
+            unique[key] = row
+        ordered = list(unique.values())
+        ordered.sort(key=lambda row: float(row.get("t_min") or 0), reverse=True)
+        ordered = ordered[:safe_limit]
         return {
-            "source": f"IRSA TAP {table}",
+            "source": "IRSA SIA2 — SPHEREx DR1 + QR3",
             "is_demo": False,
-            "count": len(rows),
-            "observations": rows,
-            "query": {"ra": float(ra), "dec": float(dec), "radius": float(radius), "limit": safe_limit},
+            "count": len(ordered),
+            "observations": ordered,
+            "query": {"ra": ra, "dec": dec, "radius": radius, "limit": safe_limit,
+                      "collections": list(self.COLLECTIONS)},
+            "warnings": [str(error) for error in failures] if failures else [],
         }
 
     async def get_observation_detail(self, obs_id: str) -> dict[str, Any]:
         if not isinstance(obs_id, str) or not obs_id.strip() or len(obs_id) > 256:
             raise ValueError("Invalid observation identifier")
-        schema, table, columns = await self._discover_table()
-        identifier = "obs_id" if "obs_id" in columns else "obs_publisher_did" if "obs_publisher_did" in columns else None
-        if identifier is None:
-            raise IRSAIncompatibleSchemaError("The IRSA ObsCore table has no supported observation identifier")
-        escaped = obs_id.strip().replace("'", "''")
-        rows = await self._tap(f"SELECT TOP 1 * FROM {table} WHERE {identifier} = '{escaped}'")
-        if not rows:
-            raise ObservationNotFoundError(f"Observation {obs_id} was not found")
-        return {"source": f"IRSA TAP {table}", "is_demo": False, "observation": rows[0]}
+        raise ObservationNotFoundError(
+            "Direct detail lookup is not exposed by SIA2; search by sky position instead."
+        )
 
 
 # Backwards-compatible name used by older API handlers.

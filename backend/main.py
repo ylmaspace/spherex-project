@@ -121,7 +121,7 @@ async def get_catalog(
 
 
 @app.get("/api/fits")
-async def get_fits(path: str = Query(..., min_length=1, max_length=1024), request: Request = None):
+async def get_fits(request: Request, path: str = Query(..., min_length=1, max_length=1024)):
     try:
         range_header = request.headers.get("range") if request else None
         upstream, chunks = await catalog_service.stream_fits(path, range_header)

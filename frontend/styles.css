@@ -846,3 +846,8 @@ body {
     .visor-stage.local-split-active #split-local-container{width:50%}
     .blink-rate-control{min-width:130px}
 }
+
+
+/* Entrada al laboratorio multimagen independiente */
+#open-multifits-tool{display:inline-flex;align-items:center;justify-content:center;text-decoration:none;white-space:nowrap}
+@media(max-width:900px){#open-multifits-tool{font-size:.65rem;padding:8px 10px}}

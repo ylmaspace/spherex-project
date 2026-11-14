@@ -5,7 +5,7 @@ import uuid
 from collections import defaultdict, deque
 from pathlib import Path
 
-from fastapi import Depends, FastAPI, File, HTTPException, Query, Request, UploadFile
+from fastapi import Body, Depends, FastAPI, File, HTTPException, Query, Request, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, JSONResponse, StreamingResponse
 from fastapi.staticfiles import StaticFiles
@@ -119,6 +119,73 @@ async def get_catalog(
     except CatalogError as exc:
         logger.warning("IRSA catalog unavailable: %s", exc)
         raise HTTPException(status_code=503, detail="El directorio oficial de SPHEREx en IRSA no está disponible.") from exc
+
+
+@app.post("/api/fits/import-directory")
+async def import_fits_directory(payload: dict = Body(...)):
+    """Download selected FITS files server-side from one official, browsable IRSA directory."""
+    directory = payload.get("directory_path")
+    files = payload.get("files")
+    if not isinstance(directory, str) or not isinstance(files, list) or not files:
+        raise HTTPException(status_code=422, detail="Indica un directorio IRSA y una lista de archivos FITS.")
+    if len(files) > 16:
+        raise HTTPException(status_code=413, detail="Importa como máximo 16 FITS por lote.")
+    try:
+        normalized_directory = catalog_service.normalize_path(directory)
+        listed = await catalog_service.list_directory(normalized_directory)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    except CatalogError as exc:
+        raise HTTPException(status_code=503, detail="No se pudo consultar el directorio oficial de IRSA.") from exc
+
+    allowed = {entry.path: entry for entry in listed if entry.kind == "fits"}
+    requested = []
+    for item in files:
+        if not isinstance(item, str) or item not in allowed:
+            raise HTTPException(status_code=400, detail="La selección contiene un archivo que no pertenece a ese directorio IRSA.")
+        if item in requested:
+            continue
+        requested.append(item)
+
+    results, errors = [], []
+    total_bytes = 0
+    for relative_path in requested:
+        entry = allowed[relative_path]
+        filename = Path(entry.name).name
+        if entry.size is not None and entry.size > MAX_UPLOAD_BYTES:
+            errors.append({"filename": filename, "error": "Supera el límite de 120 MB por FITS."})
+            continue
+        try:
+            upstream, chunks = await catalog_service.stream_fits(relative_path)
+            content = bytearray()
+            too_large = False
+            async for chunk in chunks:
+                if len(content) + len(chunk) > MAX_UPLOAD_BYTES or total_bytes + len(content) + len(chunk) > 600 * 1024 * 1024:
+                    too_large = True
+                    break
+                content.extend(chunk)
+            if too_large:
+                close_chunks = getattr(chunks, "aclose", None)
+                if close_chunks:
+                    await close_chunks()
+                errors.append({"filename": filename, "error": "Se ha superado el límite de 120 MB por archivo o 600 MB por lote."})
+                continue
+            total_bytes += len(content)
+            processed = process_fits_upload(filename, bytes(content))
+            processed.pop("display_path", None)
+            processed.pop("preview_path", None)
+            processed["display_url"] = f"/api/fits/local/{processed['id']}"
+            processed["preview_url"] = f"/api/fits/preview/{processed['id']}"
+            results.append(processed)
+            logger.info("IRSA directory FITS imported: path=%s id=%s size=%s", relative_path, processed["id"], len(content))
+        except (CatalogError, FITSProcessingError, ValueError) as exc:
+            logger.warning("IRSA directory FITS import failed: path=%s error=%s", relative_path, exc)
+            errors.append({"filename": filename, "error": str(exc)})
+        except Exception as exc:
+            logger.exception("Unexpected IRSA directory FITS import failure: %s", relative_path)
+            errors.append({"filename": filename, "error": "Error inesperado al descargar o procesar este FITS."})
+    return {"directory": normalized_directory, "requested": len(requested), "imported": len(results),
+            "results": results, "errors": errors, "bytes_downloaded": total_bytes}
 
 
 @app.post("/api/fits/upload")

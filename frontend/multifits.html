@@ -52,10 +52,27 @@
                 <button id="multi-directory-import" class="ylma-btn primary-gold" type="button" disabled>IMPORTAR SELECCIONADOS</button>
             </div>
             <div class="multi-directory-tools">
+                <label><input id="multi-directory-recursive" type="checkbox" checked> Incluir todos los subdirectorios</label>
                 <label><input id="multi-directory-select-all" type="checkbox" checked disabled> Seleccionar todos</label>
                 <span id="multi-directory-summary" role="status" aria-live="polite">Esperando una carpeta IRSA…</span>
             </div>
             <div id="multi-directory-files" class="multi-directory-files"><div class="multi-empty">Los FITS encontrados aparecerán aquí.</div></div>
+        </section>
+
+        <section class="multi-stack-import" aria-labelledby="multi-stack-title">
+            <div><span class="multi-directory-kicker">ALADIN LITE · STACK DIRECTO</span>
+                <h2 id="multi-stack-title">CARGAR DIRECTORIO COMPLETO EN ALADIN</h2>
+                <p>Envía cada FITS como una capa individual al visor Aladin Lite, sin crear primero copias procesadas en el servidor.</p>
+            </div>
+            <div class="multi-directory-controls">
+                <input id="multi-stack-url" type="url" inputmode="url" placeholder="https://irsa.ipac.caltech.edu/ibe/data/spherex/…/detector/">
+                <button id="multi-stack-load" class="ylma-btn primary-gold" type="button">CARGAR TODO EN ALADIN</button>
+            </div>
+            <div class="multi-directory-tools">
+                <label><input id="multi-stack-recursive" type="checkbox" checked> Incluir subdirectorios</label>
+                <span id="multi-stack-status" role="status" aria-live="polite">Carga directa de capas · requiere mucha memoria en el navegador.</span>
+            </div>
+            <p class="multi-stack-warning"><strong>AVISO DE MEMORIA:</strong> cargar un directorio completo puede consumir una cantidad muy elevada de RAM, ralentizar el ordenador o bloquear la pestaña. Para directorios grandes, recomendamos la importación por paquetes de la sección anterior.</p>
         </section>
 
         <section class="multi-controls">

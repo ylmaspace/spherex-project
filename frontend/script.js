@@ -14,6 +14,9 @@ let skyMarkerLayer = null;
 let skyMarkerSources = [];
 let skyMarkersLoaded = false;
 let savedSkyRecords = [];
+let localFitsZoom = 1;
+let localFitsPan = { x: 0, y: 0 };
+let localFitsDrag = null;
 const SKY_DB_NAME = 'ylma-spherex-atlas';
 let state = {
     userId: localStorage.getItem('ylma_user_id') || 'YLMA-USER-2026',
@@ -33,6 +36,7 @@ document.addEventListener('DOMContentLoaded', () => {
     setupEventListeners();
     setObservationStatus('Listo para consultar IRSA.');
     loadSavedSkyMap();
+    initLocalFitsControls();
 });
 
 function initUser() {
@@ -144,6 +148,18 @@ function setupEventListeners() {
     });
 }
 
+function applyLocalFitsTransform() {
+    const image = byId('fits-local-image');
+    if (image) image.style.transform = 'translate(' + localFitsPan.x + 'px, ' + localFitsPan.y + 'px) scale(' + localFitsZoom + ')';
+}
+function initLocalFitsControls() {
+    const viewport = byId('fits-local-viewport'); const image = byId('fits-local-image');
+    byId('fits-local-reset')?.addEventListener('click', () => { localFitsZoom = 1; localFitsPan = {x:0,y:0}; applyLocalFitsTransform(); });
+    viewport?.addEventListener('wheel', (event) => { event.preventDefault(); localFitsZoom = Math.max(.25, Math.min(12, localFitsZoom * (event.deltaY < 0 ? 1.15 : 1/1.15))); applyLocalFitsTransform(); }, {passive:false});
+    viewport?.addEventListener('pointerdown', (event) => { if (event.target !== image) return; localFitsDrag = {x:event.clientX-localFitsPan.x,y:event.clientY-localFitsPan.y}; viewport.setPointerCapture(event.pointerId); });
+    viewport?.addEventListener('pointermove', (event) => { if (!localFitsDrag) return; localFitsPan = {x:event.clientX-localFitsDrag.x,y:event.clientY-localFitsDrag.y}; applyLocalFitsTransform(); });
+    const stop = () => {localFitsDrag = null;}; viewport?.addEventListener('pointerup',stop); viewport?.addEventListener('pointercancel',stop);
+}
 function openSkyDatabase() {
     return new Promise((resolve, reject) => {
         const request = indexedDB.open(SKY_DB_NAME, 1);
@@ -344,10 +360,6 @@ async function loadLocalFits(file, existingRecordId = null) {
             showFitsProgress('SUBIENDO ARCHIVO', `${name} · ${(file.size / 1048576).toFixed(1)} MB`, percent);
         });
         showFitsProgress('DECODIFICANDO DATOS CIENTÍFICOS', 'Leyendo HDU, imagen y coordenadas WCS…', 84);
-        await initAladinViewer();
-        if (!aladin || typeof aladin.displayFITS !== 'function') {
-            throw new Error('El visor Aladin Lite no está disponible.');
-        }
         updateSkyCoordinates(result);
         const localId = existingRecordId || (crypto.randomUUID ? crypto.randomUUID() : `fits-${Date.now()}-${Math.random().toString(16).slice(2)}`);
         const record = {
@@ -363,47 +375,29 @@ async function loadLocalFits(file, existingRecordId = null) {
         rebuildSkyMarkers();
 
         const token = ++fitsLoadToken;
-        const displayUrl = `${result.display_url}?v=${Date.now()}`;
-        showFitsProgress('RENDERIZANDO EN EL MAPA CELESTE', 'Aladin está preparando la imagen y ajustando el campo de visión…', 92);
-        setObservationStatus(`FITS interpretado: ${name}`, `HDU ${result.hdu_index} · ${result.width}×${result.height}`);
-        let completed = false;
-        const finish = (ra, dec, fov) => {
-            if (token !== fitsLoadToken || completed) return;
-            completed = true;
-            updateSkyCoordinates({ ...result, ra: Number.isFinite(ra) ? ra : result.ra,
-                dec: Number.isFinite(dec) ? dec : result.dec,
-                pixel_scale_arcsec: result.pixel_scale_arcsec });
-            if (Number.isFinite(fov) && fov > 0) {
-                state.currentRadius = Math.min(10, Math.max(0.002, fov));
-                aladin.setFov(state.currentRadius);
-                if (byId('input-radius')) byId('input-radius').value = state.currentRadius.toFixed(5);
-            }
+        const image = byId('fits-local-image');
+        const localViewer = byId('fits-local-viewer');
+        const aladinContainer = byId('aladin-lite-div');
+        if (!image || !localViewer) throw new Error('No se encuentra el visor FITS local.');
+        showFitsProgress('RENDERIZANDO IMAGEN', 'Preparando vista científica independiente…', 92);
+        image.onload = () => {
+            if (token !== fitsLoadToken) return;
+            localFitsZoom = 1; localFitsPan = { x: 0, y: 0 }; applyLocalFitsTransform();
+            byId('fits-local-title').textContent = name;
+            byId('fits-local-coords').textContent = 'RA ' + Number(result.ra).toFixed(5) + '° · Dec ' + Number(result.dec).toFixed(5) + '°';
+            localViewer.hidden = false;
+            if (aladinContainer) aladinContainer.style.display = 'none';
             setActiveLayer('layer-fits');
             if (byId('info-epoch-label')) byId('info-epoch-label').textContent = name;
             if (byId('hud-survey')) byId('hud-survey').textContent = 'FITS LOCAL · WCS';
             if (byId('timeline-epoch-title')) byId('timeline-epoch-title').textContent = name;
             if (byId('fits-dropzone')) byId('fits-dropzone').classList.add('fits-loaded');
-            setObservationStatus(`Imagen visible y guardada: ${name}`, `HDU ${result.hdu_index} · ${result.width}×${result.height}`);
-            showFitsProgress('IMAGEN INCORPORADA', 'La imagen ya está en tu mapa celeste. Puedes seguir añadiendo observaciones.', 100);
+            setObservationStatus('Imagen visible y guardada: ' + name, 'HDU ' + result.hdu_index + ' · ' + result.width + '×' + result.height);
+            showFitsProgress('IMAGEN INCORPORADA', 'Imagen renderizada sin depender de Aladin ni de CDS.', 100);
             setTimeout(hideFitsProgress, 650);
         };
-        aladin.displayFITS(
-            displayUrl,
-            { name, colormap: 'grayscale' },
-            (ra, dec, fov) => finish(ra, dec, fov),
-            (error) => {
-                console.error('Aladin FITS render failed', error);
-                if (token !== fitsLoadToken || completed) return;
-                hideFitsProgress();
-                setObservationStatus('El FITS se ha leído y guardado, pero Aladin no pudo renderizarlo. Comprueba el formato de imagen/WCS.', '');
-            }
-        );
-        setTimeout(() => {
-            if (token === fitsLoadToken && !completed) {
-                hideFitsProgress();
-                setObservationStatus('La imagen se ha procesado y guardado, pero el visor tarda demasiado en renderizarla.', '');
-            }
-        }, 60000);
+        image.onerror = () => { if (token === fitsLoadToken) { hideFitsProgress(); setObservationStatus('No se pudo cargar la vista PNG local.', ''); } };
+        image.src = result.preview_url + '?v=' + Date.now();
     } catch (error) {
         hideFitsProgress();
         console.error('FITS upload failed', error);

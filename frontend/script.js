@@ -9,6 +9,9 @@ let observations = [];
 let catalogEntries = [];
 let requestController = null;
 let activeLocalFitsUrl = null;
+let comparisonLocalFitsUrl = null;
+let comparisonLocalFitsName = '';
+let blinkLocalShowingSecond = false;
 let fitsLoadToken = 0;
 let skyMarkerLayer = null;
 let skyMarkerSources = [];
@@ -86,6 +89,12 @@ function setupEventListeners() {
         loadCatalog();
     });
     byId('select-fits-btn')?.addEventListener('click', () => byId('local-fits-input')?.click());
+    byId('compare-fits-btn')?.addEventListener('click', () => byId('compare-fits-input')?.click());
+    byId('compare-fits-input')?.addEventListener('change', async (event) => {
+        const file = event.target.files?.[0];
+        event.target.value = '';
+        if (file) await loadComparisonFits(file);
+    });
     byId('fits-drop-button')?.addEventListener('click', (event) => {
         event.stopPropagation();
         byId('local-fits-input')?.click();
@@ -342,6 +351,62 @@ async function uploadFitsToBackend(file, onProgress) {
         onProgress(2);
         xhr.send(form);
     });
+}
+
+async function loadComparisonFits(file) {
+    if (!activeLocalFitsUrl) {
+        setObservationStatus('Primero incorpora la imagen FITS principal; después podrás cargar la segunda para compararlas.', '');
+        return;
+    }
+    if (!/\.(fits?|fts)$/i.test(file.name || '') || !file.size || file.size > 120 * 1024 * 1024) {
+        setObservationStatus('Selecciona un FITS válido de hasta 120 MB.', 'Archivo no válido');
+        return;
+    }
+    try {
+        showFitsProgress('CARGANDO SEGUNDA IMAGEN', 'Procesando ' + file.name + '…', 0);
+        const result = await uploadFitsToBackend(file, (percent) => {
+            showFitsProgress('SUBIENDO SEGUNDA IMAGEN', file.name, percent);
+        });
+        if (!result?.id || !result.preview_url) throw new Error('El servidor no devolvió una vista previa válida.');
+        showFitsProgress('PREPARANDO COMPARACIÓN', 'Descargando la segunda imagen…', 90);
+        const response = await fetch(result.preview_url, { cache: 'no-store' });
+        if (!response.ok) throw new Error('La vista previa respondió HTTP ' + response.status + '.');
+        const blob = await response.blob();
+        if (!blob.type.startsWith('image/')) throw new Error('La vista previa recibida no es una imagen.');
+        const nextUrl = URL.createObjectURL(blob);
+        const probe = new Image();
+        probe.src = nextUrl;
+        if (probe.decode) await probe.decode();
+        else await new Promise((resolve, reject) => { probe.onload = resolve; probe.onerror = reject; });
+        if (comparisonLocalFitsUrl) URL.revokeObjectURL(comparisonLocalFitsUrl);
+        comparisonLocalFitsUrl = nextUrl;
+        comparisonLocalFitsName = file.name;
+        blinkLocalShowingSecond = false;
+        const controls = byId('compare-fits-btn');
+        if (controls) controls.textContent = 'CAMBIAR FITS DE COMPARACIÓN';
+        const blinkLabel = byId('blink-status-label');
+        if (blinkLabel) blinkLabel.textContent = 'Imagen A: ' + (byId('fits-local-title')?.textContent || 'FITS principal');
+        renderLocalSplitComparison();
+        setObservationStatus('Segunda imagen lista para comparar: ' + file.name, result.width + '×' + result.height);
+        showFitsProgress('COMPARACIÓN PREPARADA', 'Ya puedes usar Parpadear o Vista dividida.', 100);
+        setTimeout(hideFitsProgress, 700);
+    } catch (error) {
+        hideFitsProgress();
+        console.error('FITS comparison upload failed', error);
+        setObservationStatus('No se pudo cargar la segunda imagen: ' + error.message, 'Error de comparación');
+    }
+}
+
+function renderLocalSplitComparison() {
+    const left = byId('split-local-left');
+    const right = byId('split-local-right');
+    const leftTitle = byId('split-local-left-title');
+    const rightTitle = byId('split-local-right-title');
+    if (!left || !right || !activeLocalFitsUrl || !comparisonLocalFitsUrl) return;
+    left.src = activeLocalFitsUrl;
+    right.src = comparisonLocalFitsUrl;
+    if (leftTitle) leftTitle.textContent = byId('fits-local-title')?.textContent || 'FITS A';
+    if (rightTitle) rightTitle.textContent = comparisonLocalFitsName || 'FITS B';
 }
 
 function updateSkyCoordinates(result) {
@@ -754,8 +819,20 @@ function renderObservationList(message = '') {
 }
 
 function toggleSplitView() {
+    if (activeLocalFitsUrl && comparisonLocalFitsUrl) {
+        isSplitMode = !isSplitMode;
+        byId('btn-split')?.classList.toggle('active', isSplitMode);
+        byId('aladin-lite-div').style.display = isSplitMode ? 'none' : 'none';
+        byId('normal-timeline').style.display = isSplitMode ? 'none' : 'flex';
+        byId('split-view-container').style.display = 'none';
+        byId('split-local-container').style.display = isSplitMode ? 'grid' : 'none';
+        byId('fits-local-viewer').hidden = isSplitMode;
+        if (isSplitMode) renderLocalSplitComparison();
+        return;
+    }
     if (!observations.length) {
-        setObservationStatus('La vista dividida requiere al menos una observación devuelta por IRSA.', '');
+        setObservationStatus('Carga dos imágenes FITS (principal y comparación) o consulta observaciones IRSA para usar la vista dividida.', '');
+        byId('compare-fits-input')?.click();
         return;
     }
     isSplitMode = !isSplitMode;
@@ -763,6 +840,7 @@ function toggleSplitView() {
     byId('aladin-lite-div').style.display = isSplitMode ? 'none' : 'block';
     byId('normal-timeline').style.display = isSplitMode ? 'none' : 'flex';
     byId('split-view-container').style.display = isSplitMode ? 'grid' : 'none';
+    byId('split-local-container').style.display = 'none';
     if (isSplitMode) initSplitView();
     else aladin?.invalidateSize();
 }
@@ -804,9 +882,32 @@ function updateSplitPane(side, index) {
 
 function toggleBlink() {
     if (isBlinkingActive) { stopBlink(); return; }
+    if (activeLocalFitsUrl && comparisonLocalFitsUrl) {
+        isBlinkingActive = true;
+        const button = byId('blink-start-toggle');
+        if (button) button.textContent = 'DETENER BLINK';
+        const imageA = activeLocalFitsUrl;
+        const imageB = comparisonLocalFitsUrl;
+        const preview = byId('blink-local-image');
+        if (preview) {
+            preview.src = imageA;
+            preview.style.display = 'block';
+        }
+        let showSecond = false;
+        const blinkOnce = () => {
+            showSecond = !showSecond;
+            if (preview) preview.src = showSecond ? imageB : imageA;
+            const label = byId('blink-status-label');
+            if (label) label.textContent = (showSecond ? 'IMAGEN B: ' + comparisonLocalFitsName : 'IMAGEN A: ' + (byId('fits-local-title')?.textContent || 'FITS principal'));
+        };
+        blinkOnce();
+        blinkInterval = setInterval(blinkOnce, 1000);
+        return;
+    }
     if (observations.length < 2) {
         const label = byId('blink-status-label');
-        if (label) label.textContent = 'Se requieren dos observaciones reales para comparar.';
+        if (label) label.textContent = 'Carga dos imágenes FITS o consulta al menos dos observaciones IRSA para comparar.';
+        byId('compare-fits-input')?.click();
         return;
     }
     isBlinkingActive = true;

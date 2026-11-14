@@ -40,6 +40,7 @@ def test_process_fits_extracts_image_and_celestial_coordinates(tmp_path, monkeyp
 
 
 def test_fits_without_celestial_wcs_still_renders_preview(tmp_path, monkeypatch):
+    # Missing WCS must not prevent the raster preview from being displayed.
     import io
     import backend.services.fits_processor as processor
     monkeypatch.setattr(processor, "UPLOAD_DIR", tmp_path)

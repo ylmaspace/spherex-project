@@ -34,7 +34,7 @@ def process_fits_upload(filename: str, content: bytes) -> dict[str, Any]:
     preview_path = UPLOAD_DIR / f"{upload_id}-preview.png"
     try:
         original_path.write_bytes(content)
-        with fits.open(original_path, memmap=True, lazy_load_hdus=True) as hdus:
+        with fits.open(original_path, memmap=False, lazy_load_hdus=True) as hdus:
             candidates = []
             for index, hdu in enumerate(hdus):
                 data = hdu.data
@@ -90,7 +90,6 @@ def process_fits_upload(filename: str, content: bytes) -> dict[str, Any]:
                 low, high = float(finite.min()), float(finite.max())
             if high <= low:
                 high = low + 1.0
-            pixel_scales = np.abs(np.asarray(wcs.pixel_scale_matrix, dtype=float))
             try:
                 from astropy.wcs.utils import proj_plane_pixel_scales
                 scales = np.abs(proj_plane_pixel_scales(wcs)) * 3600.0 if wcs.has_celestial else []

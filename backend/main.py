@@ -6,12 +6,14 @@ import time
 import uuid
 from collections import defaultdict, deque
 from pathlib import Path
+from urllib.parse import urlparse
 
 from fastapi import Body, Depends, FastAPI, File, HTTPException, Query, Request, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, JSONResponse, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 from sqlalchemy.orm import Session
+from starlette.concurrency import run_in_threadpool
 
 from backend.database import Base, engine, get_db
 from backend.models import AnswerLog, User
@@ -55,6 +57,59 @@ async def request_rate_limit(request: Request, call_next):
             return JSONResponse(status_code=429, content={"detail": "Too many requests; retry in a minute."})
         window.append(now)
     return await call_next(request)
+
+
+MAX_FITS_PACKAGE_FILES = 4
+MAX_FITS_PACKAGE_BYTES = 240 * 1024 * 1024
+
+
+def _public_fits_result(result: dict, filename: str) -> dict:
+    result["filename"] = Path(filename).name[:180]
+    result.pop("display_path", None)
+    result.pop("preview_path", None)
+    result["display_url"] = f"/api/fits/local/{result['id']}"
+    result["preview_url"] = f"/api/fits/preview/{result['id']}"
+    return result
+
+
+def _decompress_fits_if_needed(filename: str, content: bytes) -> tuple[str, bytes]:
+    if not content:
+        raise FITSProcessingError("El archivo está vacío.")
+    if len(content) > MAX_UPLOAD_BYTES:
+        raise FITSProcessingError("El archivo supera el límite de 120 MB.")
+    if filename.lower().endswith((".fits.gz", ".fit.gz", ".fts.gz")):
+        try:
+            with gzip.GzipFile(fileobj=io.BytesIO(content), mode="rb") as compressed:
+                expanded = compressed.read(MAX_UPLOAD_BYTES + 1)
+        except (OSError, EOFError) as exc:
+            raise FITSProcessingError("El FITS comprimido no es un archivo GZIP válido.") from exc
+        if len(expanded) > MAX_UPLOAD_BYTES:
+            raise FITSProcessingError("El FITS descomprimido supera el límite de 120 MB.")
+        return filename[:-3], expanded
+    return filename, content
+
+
+async def _process_fits_content(filename: str, content: bytes) -> dict:
+    processing_name, processing_content = _decompress_fits_if_needed(filename, content)
+    result = await run_in_threadpool(process_fits_upload, processing_name, processing_content)
+    return _public_fits_result(result, filename)
+
+
+async def _read_irsa_stream_limited(chunks, limit: int) -> bytes:
+    content = bytearray()
+    try:
+        async for chunk in chunks:
+            if len(content) + len(chunk) > limit:
+                raise FITSProcessingError("La descarga supera el límite permitido para este paquete.")
+            content.extend(chunk)
+    finally:
+        close_chunks = getattr(chunks, "aclose", None)
+        if close_chunks:
+            await close_chunks()
+    if not content:
+        raise FITSProcessingError("IRSA devolvió un archivo vacío.")
+    return bytes(content)
+
 
 spherex_service = SPHERExService()
 catalog_service = IRSAFileCatalog()
@@ -125,19 +180,20 @@ async def get_catalog(
 
 @app.post("/api/fits/import-directory")
 async def import_fits_directory(payload: dict = Body(...)):
-    """Download selected FITS files server-side from one official, browsable IRSA directory."""
+    """Import one small, validated package of FITS products from an official IRSA directory."""
     directory = payload.get("directory_path")
     files = payload.get("files")
     if not isinstance(directory, str) or not isinstance(files, list) or not files:
         raise HTTPException(status_code=422, detail="Indica un directorio IRSA y una lista de archivos FITS.")
-    if len(files) > 16:
-        raise HTTPException(status_code=413, detail="Importa como máximo 16 FITS por lote.")
+    if len(files) > MAX_FITS_PACKAGE_FILES:
+        raise HTTPException(status_code=413, detail=f"Cada paquete admite como máximo {MAX_FITS_PACKAGE_FILES} FITS.")
     try:
         normalized_directory = catalog_service.normalize_path(directory)
         listed = await catalog_service.list_directory(normalized_directory)
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
     except CatalogError as exc:
+        logger.warning("IRSA directory scan failed: %s", exc)
         raise HTTPException(status_code=503, detail="No se pudo consultar el directorio oficial de IRSA.") from exc
 
     allowed = {entry.path: entry for entry in listed if entry.kind == "fits"}
@@ -145,12 +201,11 @@ async def import_fits_directory(payload: dict = Body(...)):
     for item in files:
         if not isinstance(item, str) or item not in allowed:
             raise HTTPException(status_code=400, detail="La selección contiene un archivo que no pertenece a ese directorio IRSA.")
-        if item in requested:
-            continue
-        requested.append(item)
+        if item not in requested:
+            requested.append(item)
 
     results, errors = [], []
-    total_bytes = 0
+    bytes_downloaded = 0
     for relative_path in requested:
         entry = allowed[relative_path]
         filename = Path(entry.name).name
@@ -159,47 +214,54 @@ async def import_fits_directory(payload: dict = Body(...)):
             continue
         try:
             upstream, chunks = await catalog_service.stream_fits(relative_path)
-            content = bytearray()
-            too_large = False
-            async for chunk in chunks:
-                if len(content) + len(chunk) > MAX_UPLOAD_BYTES or total_bytes + len(content) + len(chunk) > 600 * 1024 * 1024:
-                    too_large = True
-                    break
-                content.extend(chunk)
-            if too_large:
-                close_chunks = getattr(chunks, "aclose", None)
-                if close_chunks:
-                    await close_chunks()
-                errors.append({"filename": filename, "error": "Se ha superado el límite de 120 MB por archivo o 600 MB por lote."})
+            remaining = min(MAX_UPLOAD_BYTES, MAX_FITS_PACKAGE_BYTES - bytes_downloaded)
+            if remaining <= 0:
+                errors.append({"filename": filename, "error": "El paquete ha alcanzado su límite de 240 MB."})
                 continue
-            total_bytes += len(content)
-            fits_content = bytes(content)
-            processing_filename = filename
-            if filename.lower().endswith(".gz"):
-                try:
-                    with gzip.GzipFile(fileobj=io.BytesIO(fits_content), mode="rb") as compressed:
-                        fits_content = compressed.read(MAX_UPLOAD_BYTES + 1)
-                except (OSError, EOFError) as exc:
-                    raise FITSProcessingError("El FITS comprimido no es un archivo GZIP válido.") from exc
-                if len(fits_content) > MAX_UPLOAD_BYTES:
-                    raise FITSProcessingError("El FITS descomprimido supera el límite de 120 MB.")
-                processing_filename = filename[:-3]
-            processed = process_fits_upload(processing_filename, fits_content)
-            processed["filename"] = filename[:180]
-            processed.pop("display_path", None)
-            processed.pop("preview_path", None)
-            processed["display_url"] = f"/api/fits/local/{processed['id']}"
-            processed["preview_url"] = f"/api/fits/preview/{processed['id']}"
-            results.append(processed)
-            logger.info("IRSA directory FITS imported: path=%s id=%s size=%s", relative_path, processed["id"], len(content))
+            content = await _read_irsa_stream_limited(chunks, remaining)
+            bytes_downloaded += len(content)
+            results.append(await _process_fits_content(filename, content))
         except (CatalogError, FITSProcessingError, ValueError) as exc:
-            logger.warning("IRSA directory FITS import failed: path=%s error=%s", relative_path, exc)
+            logger.warning("IRSA FITS package item failed: path=%s error=%s", relative_path, exc)
             errors.append({"filename": filename, "error": str(exc)})
-        except Exception as exc:
-            logger.exception("Unexpected IRSA directory FITS import failure: %s", relative_path)
+        except Exception:
+            logger.exception("Unexpected IRSA FITS package failure: %s", relative_path)
             errors.append({"filename": filename, "error": "Error inesperado al descargar o procesar este FITS."})
-    return {"directory": normalized_directory, "requested": len(requested), "imported": len(results),
-            "results": results, "errors": errors, "bytes_downloaded": total_bytes}
+    return {
+        "directory": normalized_directory,
+        "package_size": MAX_FITS_PACKAGE_FILES,
+        "requested": len(requested),
+        "imported": len(results),
+        "results": results,
+        "errors": errors,
+        "bytes_downloaded": bytes_downloaded,
+    }
+
+
+@app.post("/api/fits/import-url")
+async def import_fits_url(payload: dict = Body(...)):
+    """Download and process one direct FITS URL from the official SPHEREx IBE archive."""
+    source_url = payload.get("url")
+    if not isinstance(source_url, str) or not source_url.strip() or len(source_url) > 2048:
+        raise HTTPException(status_code=422, detail="Introduce una URL directa de un archivo FITS.")
+    try:
+        parsed = urlparse(source_url.strip())
+        filename = Path(parsed.path).name
+        upstream, chunks = await catalog_service.stream_access_url(source_url.strip())
+        content = await _read_irsa_stream_limited(chunks, MAX_UPLOAD_BYTES)
+        content_type = str(upstream.headers.get("content-type", "")).lower()
+        if "text/html" in content_type or content.lstrip().lower().startswith((b"<!doctype html", b"<html")):
+            raise FITSProcessingError("IRSA devolvió una página HTML en lugar de un archivo FITS.")
+        result = await _process_fits_content(filename, content)
+        logger.info("Direct IRSA FITS imported: filename=%s id=%s bytes=%s", filename, result["id"], len(content))
+        return result
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    except CatalogError as exc:
+        logger.warning("Direct IRSA FITS download failed: %s", exc)
+        raise HTTPException(status_code=502, detail="No se pudo descargar el FITS desde IRSA.") from exc
+    except FITSProcessingError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
 
 
 @app.post("/api/fits/upload")
@@ -207,9 +269,9 @@ async def upload_local_fits(file: UploadFile = File(...)):
     """Inspect a local FITS, select the best 2D image HDU and extract its celestial WCS."""
     filename = Path(file.filename or "observation.fits").name
     logger.info("FITS upload received: filename=%s content_type=%s", filename, file.content_type)
-    if not filename.lower().endswith((".fits", ".fit", ".fts")):
+    if not filename.lower().endswith((".fits", ".fit", ".fts", ".fits.gz", ".fit.gz", ".fts.gz")):
         await file.close()
-        raise HTTPException(status_code=415, detail="Formato no admitido. Sube un FITS sin comprimir.")
+        raise HTTPException(status_code=415, detail="Formato no admitido. Sube un FITS o FITS comprimido en GZIP.")
     try:
         content = await file.read(MAX_UPLOAD_BYTES + 1)
     finally:
@@ -218,11 +280,7 @@ async def upload_local_fits(file: UploadFile = File(...)):
         logger.warning("FITS upload rejected: filename=%s size_bytes=%s", filename, len(content))
         raise HTTPException(status_code=413, detail="El archivo supera el límite de 120 MB.")
     try:
-        result = process_fits_upload(filename, content)
-        result.pop("display_path", None)
-        result.pop("preview_path", None)
-        result["display_url"] = f"/api/fits/local/{result['id']}"
-        result["preview_url"] = f"/api/fits/preview/{result['id']}"
+        result = await _process_fits_content(filename, content)
         logger.info(
             "FITS upload processed: id=%s filename=%s dimensions=%sx%s hdu=%s ra=%s dec=%s",
             result["id"], filename, result["width"], result["height"],

@@ -346,7 +346,7 @@ async function fetchDirectoryTree(raw, recursive = true) {
     const MAX_FILES = 5000;
     while (queue.length) {
         const current = queue.shift();
-        const normalizedKey = current.path.replace(/\\/$/, '');
+        const normalizedKey = current.path.replace(/\/$/, '');
         if (visited.has(normalizedKey)) continue;
         visited.add(normalizedKey);
         if (visited.size > MAX_DIRECTORIES) throw new Error('El directorio contiene más de 500 subdirectorios; reduce el alcance.');
@@ -374,7 +374,7 @@ async function fetchDirectoryTree(raw, recursive = true) {
             if (!response.ok) throw new Error(payload.detail || 'No se pudo leer la página ' + page + '.');
             for (const file of (payload.fits_files || payload.observations || [])) {
                 files.push({...file, directory_path: current.path});
-                if (files.length >= MAX_FILES) throw new Error('Se alcanzó el límite de seguridad de 5.000 FITS por exploración.');
+                if (files.length > MAX_FILES) throw new Error('Se alcanzó el límite de seguridad de 5.000 FITS por exploración.');
             }
         }
         if (recursive && current.depth < 12) {
@@ -400,9 +400,9 @@ async function scanIRsaDirectory() {
     const recursive = $('multi-directory-recursive').checked;
     $('multi-directory-summary').textContent = recursive ? 'Explorando el directorio y sus subdirectorios…' : 'Consultando el índice oficial de IRSA…';
     try {
-        const all = await fetchDirectoryTree(parsed.href.replace(/\\/$/, ''), recursive);
+        const all = await fetchDirectoryTree(parsed.href.replace(/\/$/, ''), recursive);
         const unique = new Map(all.map(file => [file.path, file]));
-        state.directoryPath = parsed.href.replace(/\\/$/, '');
+        state.directoryPath = parsed.href.replace(/\/$/, '');
         state.directoryFiles = Array.from(unique.values());
         state.importedDirectoryPaths.clear();
         renderDirectoryFiles();
@@ -583,7 +583,7 @@ async function loadWholeDirectoryIntoAladin() {
     button.disabled = true;
     $('multi-stack-status').textContent = 'Explorando todos los directorios…';
     try {
-        const files = await fetchDirectoryTree(parsed.href.replace(/\\/$/, ''), $('multi-stack-recursive').checked);
+        const files = await fetchDirectoryTree(parsed.href.replace(/\/$/, ''), $('multi-stack-recursive').checked);
         if (!files.length) throw new Error('No se encontraron FITS en esa carpeta.');
         if (!confirm('Se han encontrado ' + files.length + ' FITS. Aladin intentará mantenerlos como capas del navegador. El consumo de RAM puede ser muy elevado. ¿Cargar las ' + files.length + ' capas?')) return;
         stopBlink();

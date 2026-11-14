@@ -320,18 +320,26 @@ async function uploadFitsToBackend(file, onProgress) {
     return new Promise((resolve, reject) => {
         const xhr = new XMLHttpRequest();
         xhr.open('POST', '/api/fits/upload');
+        xhr.timeout = 8 * 60 * 1000;
         xhr.responseType = 'json';
         xhr.upload.onprogress = (event) => {
             if (event.lengthComputable) onProgress(Math.min(78, event.loaded / event.total * 78));
         };
-        xhr.onerror = () => reject(new Error('No se pudo conectar con el servidor para procesar el FITS.'));
+        xhr.upload.onload = () => onProgress(80);
         xhr.onload = () => {
-            const payload = xhr.response || {};
+            let payload = xhr.response;
+            if (!payload || typeof payload !== 'object') {
+                try { payload = JSON.parse(xhr.responseText || '{}'); } catch (_) { payload = {}; }
+            }
             if (xhr.status >= 200 && xhr.status < 300) resolve(payload);
-            else reject(new Error(payload.detail || `El servidor respondió HTTP ${xhr.status}.`));
+            else reject(new Error(payload.detail || payload.message || `El servidor respondió HTTP ${xhr.status}.`));
         };
+        xhr.onerror = () => reject(new Error('La conexión se interrumpió durante la subida. Comprueba la conexión y vuelve a intentarlo.'));
+        xhr.ontimeout = () => reject(new Error('El servidor tardó más de 8 minutos en procesar el FITS. La carga se ha cancelado; prueba con un archivo más pequeño.'));
+        xhr.onabort = () => reject(new Error('La carga del FITS se canceló.'));
         const form = new FormData();
         form.append('file', file, file.name || 'observation.fits');
+        onProgress(2);
         xhr.send(form);
     });
 }
@@ -362,11 +370,16 @@ async function loadLocalFitsBatch(files) {
         setObservationStatus('No se encontraron archivos FITS válidos en la selección.', '');
         return;
     }
+    let succeeded = 0;
     for (let index = 0; index < fitsFiles.length; index += 1) {
         showFitsProgress('CREANDO TU MAPA CELESTE', `Procesando imagen ${index + 1} de ${fitsFiles.length}: ${fitsFiles[index].name}`, 0);
-        await loadLocalFits(fitsFiles[index]);
+        if (await loadLocalFits(fitsFiles[index])) succeeded += 1;
     }
-    setObservationStatus(`Mapa actualizado: ${fitsFiles.length} FITS procesado(s).`, `${savedSkyRecords.length} imágenes guardadas`);
+    hideFitsProgress();
+    setObservationStatus(
+        `Carga finalizada: ${succeeded} de ${fitsFiles.length} FITS incorporados.`,
+        `${savedSkyRecords.length} imágenes guardadas`
+    );
 }
 
 async function loadLocalFits(file, existingRecordId = null) {
@@ -449,10 +462,12 @@ async function loadLocalFits(file, existingRecordId = null) {
         );
         showFitsProgress('IMAGEN INCORPORADA', 'La imagen ya está visible en el visor local.', 100);
         setTimeout(hideFitsProgress, 650);
+        return true;
     } catch (error) {
         hideFitsProgress();
         console.error('FITS upload failed', error);
         setObservationStatus('No se pudo incorporar el FITS: ' + error.message, 'Error de carga');
+        return false;
     }
 }
 

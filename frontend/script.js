@@ -345,11 +345,11 @@ function toggleBlink() {
         select.replaceChildren();
         observations.forEach((item, i) => {
             const option = document.createElement('option');
-            option.value = String(i);
+            option.value = String(i + 1);
             option.textContent = `${observationLabel(item)} — ${observationDate(item)}`;
             select.appendChild(option);
         });
-        select.value = String(idx === 0 ? 0 : observations.length - 1);
+        select.value = String(idx === 0 ? 1 : observations.length);
     });
     let flip = false;
     const blinkOnce = () => {

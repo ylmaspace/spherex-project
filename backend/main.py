@@ -213,11 +213,11 @@ async def import_fits_directory(payload: dict = Body(...)):
             errors.append({"filename": filename, "error": "Supera el límite de 120 MB por FITS."})
             continue
         try:
-            upstream, chunks = await catalog_service.stream_fits(relative_path)
             remaining = min(MAX_UPLOAD_BYTES, MAX_FITS_PACKAGE_BYTES - bytes_downloaded)
             if remaining <= 0:
                 errors.append({"filename": filename, "error": "El paquete ha alcanzado su límite de 240 MB."})
                 continue
+            upstream, chunks = await catalog_service.stream_fits(relative_path)
             content = await _read_irsa_stream_limited(chunks, remaining)
             bytes_downloaded += len(content)
             results.append(await _process_fits_content(filename, content))
@@ -255,13 +255,13 @@ async def import_fits_url(payload: dict = Body(...)):
         result = await _process_fits_content(filename, content)
         logger.info("Direct IRSA FITS imported: filename=%s id=%s bytes=%s", filename, result["id"], len(content))
         return result
+    except FITSProcessingError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
     except CatalogError as exc:
         logger.warning("Direct IRSA FITS download failed: %s", exc)
         raise HTTPException(status_code=502, detail="No se pudo descargar el FITS desde IRSA.") from exc
-    except FITSProcessingError as exc:
-        raise HTTPException(status_code=422, detail=str(exc)) from exc
 
 
 @app.post("/api/fits/upload")

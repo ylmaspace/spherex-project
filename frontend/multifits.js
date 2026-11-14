@@ -122,7 +122,8 @@ async function loadSelectedFiles() {
                 id: layerId, filename: file.name, image: rendered.image,
                 ra: Number.isFinite(rendered.ra) ? rendered.ra : result.ra,
                 dec: Number.isFinite(rendered.dec) ? rendered.dec : result.dec,
-                width: result.width, height: result.height, visible: true, opacity: 0.58
+                width: result.width, height: result.height, display_url: result.display_url,
+                visible: true, opacity: 0.58
             });
             success++;
             renderLayerList();

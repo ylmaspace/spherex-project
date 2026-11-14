@@ -97,8 +97,20 @@
                     </div>
 
                     <div id="fits-dropzone" class="fits-dropzone" role="button" tabindex="0" aria-label="Arrastra un archivo FITS aquí o pulsa para seleccionarlo">
-                        <strong>ARRASTRA AQUÍ TU ARCHIVO FITS</strong>
-                        <span>o pulsa para seleccionarlo · FITS sin comprimir · máximo 120 MB</span>
+                        <div class="fits-drop-icon">FITS</div>
+                        <strong>INCORPORAR IMAGEN AL MAPA CELESTE</strong>
+                        <span>Arrastra aquí tu archivo científico o pulsa para buscarlo</span>
+                        <small>FITS / FIT · hasta 120 MB · lectura de WCS y selección automática de HDU</small>
+                        <button class="ylma-btn primary-gold fits-drop-button" id="fits-drop-button" type="button">SELECCIONAR ARCHIVO FITS</button>
+                    </div>
+                    <div class="fits-progress-overlay" id="fits-progress-overlay" aria-live="polite" aria-hidden="true">
+                        <div class="fits-progress-card">
+                            <div class="fits-progress-orbit"></div>
+                            <h3 id="fits-progress-title">PROCESANDO OBSERVACIÓN</h3>
+                            <p id="fits-progress-message">Preparando archivo FITS…</p>
+                            <div class="fits-progress-track"><div id="fits-progress-bar"></div></div>
+                            <strong id="fits-progress-percent">0%</strong>
+                        </div>
                     </div>
                     <!-- Contenedor Único -->
                     <div id="aladin-lite-div"></div>
@@ -175,6 +187,12 @@
                     <div id="catalog-results" class="catalog-results"></div>
                 </div>
 
+                <div class="panel-section saved-sky-panel">
+                    <h3 class="panel-title">MI MAPA CELESTE</h3>
+                    <p class="doc-text">Tus FITS guardados y sus posiciones WCS. Se almacenan localmente en este navegador.</p>
+                    <div class="saved-sky-summary" id="saved-sky-summary">0 imágenes incorporadas</div>
+                    <div id="saved-sky-list" class="saved-sky-list"><p class="doc-text">Todavía no has guardado imágenes.</p></div>
+                </div>
                 <div class="panel-section">
                     <h3 class="panel-title">ARQUITECTURA DEL SISTEMA</h3>
                     <p class="doc-text">

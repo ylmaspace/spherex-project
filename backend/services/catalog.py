@@ -1,4 +1,4 @@
-"""Progressive, bounded browser for official IRSA IBE QR2 Level 2 directory listings."""
+"""Safe browser and downloader for official IRSA SPHEREx IBE directories."""
 from __future__ import annotations
 
 import html
@@ -75,9 +75,9 @@ class IRSAFileCatalog:
             root = urlparse(IBE_ROOT)
             if (parsed.scheme != "https" or parsed.hostname != _ALLOWED_HOST
                     or parsed.username or parsed.password or parsed.query or parsed.fragment
-                    or not parsed.path.startswith(root.path)):
+                    or not (parsed.path == root.path.rstrip("/") or parsed.path.startswith(root.path))):
                 raise ValueError("Introduce una URL HTTPS dentro de https://irsa.ipac.caltech.edu/ibe/data/spherex/")
-            value = parsed.path[len(root.path):]
+            value = parsed.path[len(root.path):] if parsed.path.startswith(root.path) else ""
         pieces = value.strip("/").split("/") if value.strip("/") else []
         if any(piece in {"", ".", ".."} or not re.fullmatch(r"[A-Za-z0-9._-]+", piece) for piece in pieces):
             raise ValueError("Invalid IRSA catalog path")
@@ -175,8 +175,8 @@ class IRSAFileCatalog:
         directories = [{"name": entry.name, "path": entry.path, "url": entry.url}
                        for entry in entries if entry.kind == "directory"]
         return {
-            "source": "IRSA IBE SPHEREx QR2 Level 2",
-            "root_url": IBE_LEVEL2_ROOT,
+            "source": "IRSA IBE SPHEREx archive",
+            "root_url": IBE_ROOT,
             "path": self.normalize_path(path),
             "directories": directories,
             "count": len(files),

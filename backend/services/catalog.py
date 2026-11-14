@@ -158,33 +158,39 @@ class IRSAFileCatalog:
                      planning_period: str = "", date: str = "", band: str = "",
                      page: int = 1, page_size: int = 50, sort: str = "name") -> dict:
         entries = await self.list_directory(path)
-        files = [entry for entry in entries if entry.kind == "fits"]
+        all_files = [entry for entry in entries if entry.kind != "directory"]
+        fits_files = [entry for entry in all_files if entry.kind == "fits"]
         filters = [query, detector, planning_period, date, band]
         needles = [str(value or "").casefold().strip() for value in filters]
-        files = [entry for entry in files if all(not needle or needle in (entry.name + " " + entry.path).casefold()
-                                                 for needle in needles)]
+        all_files = [entry for entry in all_files if all(
+            not needle or needle in (entry.name + " " + entry.path).casefold()
+            for needle in needles
+        )]
+        fits_files = [entry for entry in all_files if entry.kind == "fits"]
         if sort == "path":
-            files.sort(key=lambda entry: entry.path.casefold())
+            all_files.sort(key=lambda entry: entry.path.casefold())
         elif sort == "detector":
-            files.sort(key=lambda entry: (self._detector(entry.path) or "", entry.name.casefold()))
+            all_files.sort(key=lambda entry: (self._detector(entry.path) or "", entry.name.casefold()))
         else:
-            files.sort(key=lambda entry: entry.name.casefold())
+            all_files.sort(key=lambda entry: entry.name.casefold())
         page = max(1, int(page))
         page_size = min(100, max(1, int(page_size)))
         start = (page - 1) * page_size
-        directories = [{"name": entry.name, "path": entry.path, "url": entry.url}
+        directories = [{"name": entry.name, "path": entry.path, "url": entry.url, "kind": "directory"}
                        for entry in entries if entry.kind == "directory"]
+        paged_files = all_files[start:start + page_size]
         return {
             "source": "IRSA IBE SPHEREx archive",
             "root_url": IBE_ROOT,
             "path": self.normalize_path(path),
             "directories": directories,
-            "count": len(files),
+            "files": [self._entry_dict(entry) for entry in paged_files],
+            "count": len(all_files),
             "page": page,
             "page_size": page_size,
-            "pages": (len(files) + page_size - 1) // page_size,
-            "observations": [self._entry_dict(entry) for entry in files[start:start + page_size]],
-            "metadata_note": "Only listing-provided metadata is returned. FITS headers/WCS are not inferred from filenames.",
+            "pages": (len(all_files) + page_size - 1) // page_size,
+            "observations": [self._entry_dict(entry) for entry in fits_files[start:start + page_size]],
+            "metadata_note": "Only metadata present in the official directory listing is returned.",
         }
 
     @staticmethod

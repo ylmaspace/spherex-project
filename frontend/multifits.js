@@ -4,7 +4,7 @@ const PACKAGE_FILES = 4;
 const MAX_BYTES = 120 * 1024 * 1024;
 const MAX_PACKAGE_BYTES = 240 * 1024 * 1024;
 let aladinReadyPromise = null;
-const state = { viewer: null, layers: [], directoryPath: '', directoryFiles: [], importingDirectory: false, blinking: false, blinkTimer: null, blinkIndex: 0, splitViewers: [], splitMode: false, previousVisibility: [] };
+const state = { viewer: null, layers: [], directoryPath: '', directoryFiles: [], importedDirectoryPaths: new Set(), importingDirectory: false, blinking: false, blinkTimer: null, blinkIndex: 0, splitViewers: [], splitMode: false, previousVisibility: [] };
 const $ = (id) => document.getElementById(id);
 const setStatus = (message, progress) => {
     $('multi-status').textContent = message;
@@ -399,7 +399,9 @@ function renderDirectoryFiles() {
         const card = document.createElement('section'); card.className = 'multi-directory-package';
         const heading = document.createElement('div'); heading.className = 'multi-directory-package-heading';
         const label = document.createElement('label');
-        const packageSelect = document.createElement('input'); packageSelect.type = 'checkbox'; packageSelect.checked = true;
+        const packageSelect = document.createElement('input'); packageSelect.type = 'checkbox';
+        packageSelect.checked = pack.some(file => !state.importedDirectoryPaths.has(file.path));
+        packageSelect.disabled = pack.every(file => state.importedDirectoryPaths.has(file.path));
         packageSelect.setAttribute('aria-label', 'Seleccionar paquete ' + (packageIndex + 1));
         label.append(packageSelect, document.createTextNode('PAQUETE ' + String(packageIndex + 1).padStart(2, '0')));
         const count = document.createElement('small');
@@ -409,7 +411,9 @@ function renderDirectoryFiles() {
         pack.forEach(file => {
             const index = state.directoryFiles.indexOf(file);
             const row = document.createElement('label'); row.className = 'multi-directory-file';
-            const checkbox = document.createElement('input'); checkbox.type = 'checkbox'; checkbox.checked = true;
+            const checkbox = document.createElement('input'); checkbox.type = 'checkbox';
+            const alreadyImported = state.importedDirectoryPaths.has(file.path);
+            checkbox.checked = !alreadyImported; checkbox.disabled = alreadyImported;
             checkbox.className = 'multi-directory-file-select'; checkbox.dataset.index = String(index);
             checkbox.addEventListener('change', updateDirectorySelection);
             const text = document.createElement('span'); text.textContent = file.name;
@@ -417,7 +421,7 @@ function renderDirectoryFiles() {
             text.appendChild(meta); row.append(checkbox, text); filesBox.appendChild(row);
         });
         packageSelect.addEventListener('change', () => {
-            filesBox.querySelectorAll('.multi-directory-file-select').forEach(input => { input.checked = packageSelect.checked; });
+            filesBox.querySelectorAll('.multi-directory-file-select:not(:disabled)').forEach(input => { input.checked = packageSelect.checked; });
             updateDirectorySelection();
         });
         card.append(heading, filesBox); container.appendChild(card);
@@ -425,11 +429,27 @@ function renderDirectoryFiles() {
     updateDirectorySelection();
 }
 function updateDirectorySelection() {
-    const selected = $('multi-directory-files').querySelectorAll('.multi-directory-file-select:checked').length;
-    const total = state.directoryFiles.length;
-    $('multi-directory-summary').textContent = selected + ' de ' + total + ' FITS seleccionados';
+    const inputs = Array.from($('multi-directory-files').querySelectorAll('.multi-directory-file-select'));
+    const available = inputs.filter(input => !input.disabled);
+    const selected = available.filter(input => input.checked).length;
+    $('multi-directory-summary').textContent = selected + ' de ' + available.length + ' FITS pendientes seleccionados' +
+        (state.importedDirectoryPaths.size ? ' · ' + state.importedDirectoryPaths.size + ' ya incorporados' : '');
     $('multi-directory-import').disabled = selected === 0 || state.importingDirectory;
-    $('multi-directory-select-all').checked = total > 0 && selected === total;
+    const globalSelect = $('multi-directory-select-all');
+    globalSelect.disabled = available.length === 0;
+    globalSelect.checked = available.length > 0 && selected === available.length;
+    globalSelect.indeterminate = selected > 0 && selected < available.length;
+    $('multi-directory-files').querySelectorAll('.multi-directory-package').forEach(card => {
+        const packageInputs = Array.from(card.querySelectorAll('.multi-directory-file-select'));
+        const packageAvailable = packageInputs.filter(input => !input.disabled);
+        const packageSelected = packageAvailable.filter(input => input.checked).length;
+        const packageCheckbox = card.querySelector('.multi-directory-package-heading input');
+        if (packageCheckbox) {
+            packageCheckbox.disabled = packageAvailable.length === 0;
+            packageCheckbox.checked = packageAvailable.length > 0 && packageSelected === packageAvailable.length;
+            packageCheckbox.indeterminate = packageSelected > 0 && packageSelected < packageAvailable.length;
+        }
+    });
 }
 async function importDirectorySelection() {
     if (state.importingDirectory) return;
@@ -477,7 +497,14 @@ async function importDirectorySelection() {
                         width: result.width, height: result.height, display_url: result.display_url,
                         visible: true, opacity: 0.58
                     });
-                    loaded++; renderLayerList();
+                    loaded++;
+                    if (result.source_path) {
+                        state.importedDirectoryPaths.add(result.source_path);
+                        const sourceCheckbox = $('multi-directory-files').querySelector('.multi-directory-file-select[data-index="' +
+                            state.directoryFiles.findIndex(file => file.path === result.source_path) + '"]');
+                        if (sourceCheckbox) { sourceCheckbox.checked = false; sourceCheckbox.disabled = true; }
+                    }
+                    renderLayerList(); updateDirectorySelection();
                     if (loaded === 1 && Number.isFinite(rendered.ra) && Number.isFinite(rendered.dec)) viewer.gotoRaDec(rendered.ra, rendered.dec);
                 } catch (error) {
                     failed++; console.warn('No se pudo representar ' + result.filename, error);
@@ -495,8 +522,8 @@ async function importDirectorySelection() {
         $('multi-directory-summary').textContent = error.message;
     } finally {
         state.importingDirectory = false;
-        $('multi-directory-import').disabled = state.directoryFiles.length === 0;
         $('multi-directory-scan').disabled = false;
+        updateDirectorySelection();
         $('multi-blink-btn').disabled = state.layers.length < 2;
         $('multi-split-btn').disabled = state.layers.length < 2;
     }
@@ -558,7 +585,7 @@ $('multi-directory-scan').addEventListener('click', scanIRsaDirectory);
 $('multi-directory-import').addEventListener('click', importDirectorySelection);
 $('multi-single-url-import').addEventListener('click', importSingleUrl);
 $('multi-directory-select-all').addEventListener('change', () => {
-    $('multi-directory-files').querySelectorAll('.multi-directory-file-select').forEach(input => { input.checked = $('multi-directory-select-all').checked; });
+    $('multi-directory-files').querySelectorAll('.multi-directory-file-select:not(:disabled)').forEach(input => { input.checked = $('multi-directory-select-all').checked; });
     updateDirectorySelection();
 });
 window.addEventListener('beforeunload', () => stopBlink(false));

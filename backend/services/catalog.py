@@ -13,7 +13,8 @@ from urllib.parse import quote, urljoin, urlparse
 import httpx
 
 logger = logging.getLogger(__name__)
-IBE_LEVEL2_ROOT = "https://irsa.ipac.caltech.edu/ibe/data/spherex/qr2/level2/"
+IBE_ROOT = "https://irsa.ipac.caltech.edu/ibe/data/spherex/"
+IBE_LEVEL2_ROOT = IBE_ROOT  # Backwards-compatible constant; browsing now starts at the SPHEREx archive root.
 _ALLOWED_HOST = "irsa.ipac.caltech.edu"
 _CACHE_TTL = 300
 _FITS_SUFFIXES = (".fits", ".fit", ".fts", ".fits.gz", ".fit.gz", ".fts.gz")
@@ -69,7 +70,15 @@ class IRSAFileCatalog:
         value = (path or "").strip().replace("\\", "/")
         if not value:
             return ""
-        pieces = value.strip("/").split("/")
+        if value.lower().startswith(("https://", "http://")):
+            parsed = urlparse(value)
+            root = urlparse(IBE_ROOT)
+            if (parsed.scheme != "https" or parsed.hostname != _ALLOWED_HOST
+                    or parsed.username or parsed.password or parsed.query or parsed.fragment
+                    or not parsed.path.startswith(root.path)):
+                raise ValueError("Introduce una URL HTTPS dentro de https://irsa.ipac.caltech.edu/ibe/data/spherex/")
+            value = parsed.path[len(root.path):]
+        pieces = value.strip("/").split("/") if value.strip("/") else []
         if any(piece in {"", ".", ".."} or not re.fullmatch(r"[A-Za-z0-9._-]+", piece) for piece in pieces):
             raise ValueError("Invalid IRSA catalog path")
         return "/".join(pieces)
@@ -79,7 +88,7 @@ class IRSAFileCatalog:
         cached = self._cache.get(normalized)
         if not refresh and cached and time.monotonic() - cached[0] < _CACHE_TTL:
             return cached[1]
-        directory_url = IBE_LEVEL2_ROOT + (quote(normalized, safe="/") + "/" if normalized else "")
+        directory_url = IBE_ROOT + (quote(normalized, safe="/") + "/" if normalized else "")
         logger.info("IRSA IBE directory listing path=%s", normalized or "/")
         try:
             async with httpx.AsyncClient(timeout=self.timeout, follow_redirects=True) as client:
@@ -92,9 +101,9 @@ class IRSAFileCatalog:
             logger.warning("IRSA IBE listing transport failure path=%s: %s", normalized, exc)
             raise CatalogError("Could not connect to the official IRSA IBE archive") from exc
         final = urlparse(str(response.url))
-        root_path = urlparse(IBE_LEVEL2_ROOT).path
+        root_path = urlparse(IBE_ROOT).path
         if final.scheme != "https" or final.hostname != _ALLOWED_HOST or not final.path.startswith(root_path):
-            raise CatalogError("IRSA redirected directory listing outside the official QR2 Level 2 archive")
+            raise CatalogError("IRSA redirected directory listing outside the official SPHEREx IBE archive")
         try:
             entries = self._parse_listing(response.text, response.url)
         except (ValueError, TypeError) as exc:
@@ -124,7 +133,7 @@ class IRSAFileCatalog:
             parser.feed(body)
             raw = [(label, href, None) for href, label in parser.links]
 
-        root_path = urlparse(IBE_LEVEL2_ROOT).path
+        root_path = urlparse(IBE_ROOT).path
         entries: dict[str, CatalogEntry] = {}
         for label, href, size in raw:
             href = html.unescape(href).strip()
@@ -192,7 +201,7 @@ class IRSAFileCatalog:
     def validate_fits_path(cls, path: str) -> str:
         normalized = cls.normalize_path(path)
         if not normalized.lower().endswith(_FITS_SUFFIXES):
-            raise ValueError("Only FITS products listed under the IRSA Level 2 root may be opened")
+            raise ValueError("Only FITS products listed under the official SPHEREx IBE archive may be downloaded")
         return normalized
 
     async def stream_fits(self, path: str, range_header: str | None = None):
@@ -211,7 +220,7 @@ class IRSAFileCatalog:
         try:
             response = await client.send(client.build_request("GET", url, headers=headers), stream=True)
             final = urlparse(str(response.url))
-            if final.scheme != "https" or final.hostname != _ALLOWED_HOST or not final.path.startswith(urlparse(IBE_LEVEL2_ROOT).path):
+            if final.scheme != "https" or final.hostname != _ALLOWED_HOST or not final.path.startswith(urlparse(IBE_ROOT).path):
                 await response.aclose()
                 raise CatalogError("FITS product redirected outside the official IRSA archive")
             if response.status_code not in (200, 206):

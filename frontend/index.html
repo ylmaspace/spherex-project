@@ -280,6 +280,15 @@
                         <label style="font-size: 0.75rem; color: var(--text-muted);">Época 2:</label>
                         <select id="blink-epoch-2" style="background: #111; color: #fff; border: 1px solid var(--border-subtle); padding: 6px;"></select>
                     </div>
+                    <div class="blink-rate-control">
+                        <label for="blink-interval">INTERVALO</label>
+                        <select id="blink-interval" aria-label="Intervalo de parpadeo">
+                            <option value="2000">2 segundos · 0,5 Hz</option>
+                            <option value="1000" selected>1 segundo · 1 Hz</option>
+                            <option value="500">0,5 segundos · 2 Hz</option>
+                            <option value="333">⅓ de segundo · 3 Hz</option>
+                        </select>
+                    </div>
                     <button id="blink-start-toggle" class="ylma-btn primary-gold" style="padding: 6px 16px;">INICIAR BLINK</button>
                 </div>
             </div>

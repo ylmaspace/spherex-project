@@ -3,7 +3,7 @@ import asyncio
 import httpx
 import pytest
 
-from backend.services.catalog import CatalogError, IRSAFileCatalog
+from backend.services.catalog import CatalogError, CatalogProductNotFoundError, IRSAFileCatalog
 
 
 def test_parse_directory_entries_only_official_root_links():
@@ -45,3 +45,14 @@ def test_fits_url_is_not_synthesized_as_catalog_entry():
     response_url = httpx.URL("https://irsa.ipac.caltech.edu/ibe/data/spherex/qr2/level2/")
     entries = IRSAFileCatalog._parse_listing("<html>no files listed</html>", response_url, "")
     assert entries == []
+
+
+def test_fits_stream_requires_exact_official_listing_entry(monkeypatch):
+    catalog = IRSAFileCatalog()
+
+    async def empty_listing(path=None):
+        return []
+
+    monkeypatch.setattr(catalog, "list_directory", empty_listing)
+    with pytest.raises(CatalogProductNotFoundError):
+        asyncio.run(catalog.stream_fits("2025W18_2B/not-listed.fits"))

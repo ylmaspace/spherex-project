@@ -15,7 +15,7 @@ from backend.database import Base, engine, get_db
 from backend.models import AnswerLog, User
 from backend.schemas import AnswerResponse, AnswerSubmit, StatsResponse, UserCreate, UserResponse
 from backend.services.irsa import IRSAError, IRSAUnavailableError, ObservationNotFoundError
-from backend.services.catalog import CatalogError, IRSAFileCatalog
+from backend.services.catalog import CatalogError, CatalogProductNotFoundError, IRSAFileCatalog
 from backend.services.questions import QuestionsService
 from backend.services.spherex import SPHERExService
 from backend.services.statistics import StatisticsService
@@ -134,6 +134,8 @@ async def get_fits(request: Request, path: str = Query(..., min_length=1, max_le
         return StreamingResponse(chunks, status_code=upstream.status_code, media_type=media_type, headers=headers)
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
+    except CatalogProductNotFoundError as exc:
+        raise HTTPException(status_code=404, detail="El producto FITS no aparece en el catálogo oficial de IRSA.") from exc
     except CatalogError as exc:
         logger.warning("IRSA FITS unavailable: %s", exc)
         raise HTTPException(status_code=503, detail="El producto FITS solicitado no está disponible en IRSA.") from exc

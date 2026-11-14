@@ -261,7 +261,7 @@ async function searchObservations() {
         const response = await fetch(`${API}/api/observations?${params}`, { signal: requestController.signal });
         const payload = await response.json();
         if (!response.ok) throw new Error(payload.detail || `Error HTTP ${response.status}`);
-        observations = Array.isArray(payload.observations) ? payload.observations : [];
+        observations = Array.isArray(payload.observations) ? payload.observations.filter((item) => observationUrl(item)) : [];
         state.currentIndex = 0;
         state.splitIndexLeft = 0;
         state.splitIndexRight = Math.max(0, observations.length - 1);
@@ -273,7 +273,7 @@ async function searchObservations() {
             badge.textContent = demo ? 'MODO DEMO — DATOS NO CIENTÍFICOS' : 'FUENTE: IRSA SIA2 DR1 + QR3';
             badge.setAttribute('aria-label', source);
         }
-        setObservationStatus(demo ? 'DEMO — no son observaciones científicas reales.' : 'Conectado a IRSA/IPAC TAP',
+        setObservationStatus(demo ? 'DEMO — no son observaciones científicas reales.' : 'Conectado a IRSA SIA2 · producto FITS seleccionable',
             `${payload.count ?? observations.length} observación(es)`);
         updateSkyPosition();
         renderObservationList();

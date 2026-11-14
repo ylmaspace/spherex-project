@@ -157,6 +157,11 @@ function setupEventListeners() {
         stopBlink();
     });
     byId('blink-start-toggle')?.addEventListener('click', toggleBlink);
+    byId('blink-interval')?.addEventListener('change', () => {
+        if (!isBlinkingActive) return;
+        stopBlink();
+        toggleBlink();
+    });
     byId('btn-fs')?.addEventListener('click', toggleFullscreen);
     byId('nav-objects-btn')?.addEventListener('click', () => {
         byId('objects-modal').classList.add('active');
@@ -456,12 +461,18 @@ async function loadComparisonFits(file) {
         const response = await fetch(result.preview_url, { cache: 'no-store' });
         if (!response.ok) throw new Error('La vista previa respondió HTTP ' + response.status + '.');
         const blob = await response.blob();
-        if (!blob.type.startsWith('image/')) throw new Error('La vista previa recibida no es una imagen.');
+        if (!blob.size || !blob.type.startsWith('image/')) throw new Error('El servidor no devolvió una vista previa de imagen válida.');
         const nextUrl = URL.createObjectURL(blob);
         const probe = new Image();
-        probe.src = nextUrl;
-        if (probe.decode) await probe.decode();
-        else await new Promise((resolve, reject) => { probe.onload = resolve; probe.onerror = reject; });
+        await new Promise((resolve, reject) => {
+            probe.onload = resolve;
+            probe.onerror = () => reject(new Error('El navegador no pudo decodificar la vista previa de la segunda FITS.'));
+            probe.src = nextUrl;
+        });
+        if (!probe.naturalWidth || !probe.naturalHeight) {
+            URL.revokeObjectURL(nextUrl);
+            throw new Error('La segunda FITS generó una imagen sin dimensiones válidas.');
+        }
         if (comparisonLocalFitsUrl) URL.revokeObjectURL(comparisonLocalFitsUrl);
         comparisonLocalFitsUrl = nextUrl;
         comparisonLocalFitsName = file.name;
@@ -486,15 +497,12 @@ async function loadComparisonFits(file) {
 }
 
 function renderLocalSplitComparison() {
-    const left = byId('split-local-left');
     const right = byId('split-local-right');
-    const leftTitle = byId('split-local-left-title');
     const rightTitle = byId('split-local-right-title');
-    if (!left || !right || !activeLocalFitsUrl || !comparisonLocalFitsUrl) return;
-    left.src = activeLocalFitsUrl;
+    if (!right || !activeLocalFitsUrl || !comparisonLocalFitsUrl) return false;
     right.src = comparisonLocalFitsUrl;
-    if (leftTitle) leftTitle.textContent = byId('fits-local-title')?.textContent || 'FITS A';
     if (rightTitle) rightTitle.textContent = comparisonLocalFitsName || 'FITS B';
+    return true;
 }
 
 function updateSkyCoordinates(result) {
@@ -916,11 +924,13 @@ function toggleSplitView() {
     if (activeLocalFitsUrl && comparisonLocalFitsUrl) {
         isSplitMode = !isSplitMode;
         byId('btn-split')?.classList.toggle('active', isSplitMode);
-        byId('aladin-lite-div').style.display = isSplitMode ? 'none' : 'none';
+        const stage = byId('visor-stage');
+        stage?.classList.toggle('local-split-active', isSplitMode);
+        byId('aladin-lite-div').style.display = 'none';
         byId('normal-timeline').style.display = isSplitMode ? 'none' : 'flex';
         byId('split-view-container').style.display = 'none';
-        byId('split-local-container').style.display = isSplitMode ? 'grid' : 'none';
-        byId('fits-local-viewer').hidden = isSplitMode;
+        byId('split-local-container').style.display = isSplitMode ? 'block' : 'none';
+        byId('fits-local-viewer').hidden = false;
         if (isSplitMode) renderLocalSplitComparison();
         return;
     }
@@ -996,12 +1006,18 @@ function toggleBlink() {
         let showSecond = false;
         const blinkOnce = () => {
             showSecond = !showSecond;
+            blinkLocalShowingSecond = showSecond;
             if (preview) preview.src = showSecond ? imageB : imageA;
             const label = byId('blink-status-label');
             if (label) label.textContent = (showSecond ? 'IMAGEN B: ' + comparisonLocalFitsName : 'IMAGEN A: ' + (byId('fits-local-title')?.textContent || 'FITS principal'));
         };
+        if (preview) {
+            preview.style.width = '100%';
+            preview.style.height = '100%';
+            preview.style.objectFit = 'contain';
+        }
         blinkOnce();
-        blinkInterval = setInterval(blinkOnce, 1000);
+        blinkInterval = setInterval(blinkOnce, getBlinkIntervalMs());
         return;
     }
     if (observations.length < 2) {
@@ -1040,7 +1056,12 @@ function toggleBlink() {
         }
     };
     blinkOnce();
-    blinkInterval = setInterval(blinkOnce, 1000);
+    blinkInterval = setInterval(blinkOnce, getBlinkIntervalMs());
+}
+
+function getBlinkIntervalMs() {
+    const value = Number(byId('blink-interval')?.value || 1000);
+    return [2000, 1000, 500, 333].includes(value) ? value : 1000;
 }
 
 function stopBlink() {

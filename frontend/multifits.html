@@ -1,0 +1,87 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="theme-color" content="#050a0d">
+    <title>Multi-FITS Sphere Lab | YLMA Space</title>
+    <link rel="manifest" href="manifest.webmanifest">
+    <link rel="icon" type="image/png" href="https://i.postimg.cc/bvD3yLfH/Sphere-X-Explorer.png">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Exo+2:wght@300;400;500;600;700&family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="https://aladin.cds.unistra.fr/AladinLite/api/v3/latest/aladin.min.css">
+    <link rel="stylesheet" href="styles.css">
+    <link rel="stylesheet" href="multifits.css">
+</head>
+<body class="multi-fits-page">
+    <header class="multi-header">
+        <a class="multi-brand" href="index.html">
+            <img src="https://i.postimg.cc/bvD3yLfH/Sphere-X-Explorer.png" alt="SPHEREx Explorer">
+            <span><strong>YLMA SPACE</strong><small>SPHEREx MULTI-FITS LAB</small></span>
+        </a>
+        <a href="index.html" class="ylma-btn outline">VOLVER AL EXPLORADOR</a>
+    </header>
+
+    <main class="multi-shell">
+        <section class="multi-intro">
+            <div class="multi-kicker">LABORATORIO INDEPENDIENTE · MÓDULO EXPERIMENTAL</div>
+            <h1>MULTI-FITS <span>SPHERE LAB</span></h1>
+            <p>Carga varias observaciones FITS, sitúalas sobre el cielo mediante sus WCS y compáralas en esfera, Blink o pantalla dividida.</p>
+        </section>
+
+        <section class="multi-controls">
+            <div class="multi-upload">
+                <label for="multi-fits-input">ARCHIVOS FITS · SELECCIÓN MÚLTIPLE</label>
+                <div class="multi-upload-row">
+                    <input id="multi-fits-input" type="file" accept=".fits,.fit,.fts,application/fits" multiple>
+                    <button id="multi-load-btn" class="ylma-btn primary-gold" type="button">CARGAR IMÁGENES</button>
+                </div>
+                <small>Hasta 16 archivos por lote · 120 MB por archivo · carga secuencial para proteger el servidor</small>
+            </div>
+            <div class="multi-actions">
+                <button id="multi-sphere-btn" class="ylma-btn control-btn active" type="button">ESFERA</button>
+                <button id="multi-blink-btn" class="ylma-btn control-btn" type="button" disabled>MEGABLINK</button>
+                <button id="multi-split-btn" class="ylma-btn control-btn" type="button" disabled>SPLITSCREEN</button>
+                <label class="multi-interval">INTERVALO
+                    <select id="multi-blink-interval">
+                        <option value="2000">2 s · 0,5 Hz</option>
+                        <option value="1000" selected>1 s · 1 Hz</option>
+                        <option value="500">0,5 s · 2 Hz</option>
+                        <option value="333">⅓ s · 3 Hz</option>
+                    </select>
+                </label>
+                <label class="multi-projection">PROYECCIÓN
+                    <select id="multi-projection">
+                        <option value="SIN" selected>Esfera · ortográfica</option>
+                        <option value="AIT">Cielo completo · Aitoff</option>
+                        <option value="MOL">Cielo completo · Mollweide</option>
+                    </select>
+                </label>
+            </div>
+            <div id="multi-status" class="multi-status" role="status">Esperando archivos FITS…</div>
+            <div class="multi-progress"><div id="multi-progress-bar"></div></div>
+        </section>
+
+        <section class="multi-workspace">
+            <div class="multi-view-heading">
+                <div><strong id="multi-view-title">ESFERA CELESTE</strong><small id="multi-view-subtitle">Proyección ortográfica · marco ICRS</small></div>
+                <div id="multi-cursor-coords" class="multi-coords">RA —° · Dec —°</div>
+            </div>
+            <div id="multi-sphere-viewer" class="multi-sphere-viewer"></div>
+            <div id="multi-split-grid" class="multi-split-grid" hidden></div>
+        </section>
+
+        <section class="multi-layers-section">
+            <div class="multi-layers-heading"><h2>CAPAS FITS INCORPORADAS</h2><span id="multi-layer-count">0 imágenes</span></div>
+            <div id="multi-layer-list" class="multi-layer-list">
+                <div class="multi-empty">Todavía no hay imágenes. Selecciona varios archivos FITS para comenzar.</div>
+            </div>
+        </section>
+        <footer class="multi-footer">YLMA SPACE · SPHEREx Explorer · Datos celestes en ICRS · Aladin Lite</footer>
+    </main>
+
+    <script src="https://aladin.cds.unistra.fr/aladin_3.9.0-beta.js"></script>
+    <script src="multifits.js"></script>
+</body>
+</html>

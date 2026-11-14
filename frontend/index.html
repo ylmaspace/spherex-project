@@ -9,6 +9,7 @@
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Exo+2:wght@300;400;500;600;700&family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="styles.css">
+  <link rel="stylesheet" href="archive.css">
 </head>
 <body>
   <main id="landing-view" class="view-container active">
@@ -37,9 +38,9 @@
 
     <section class="search-bar-section">
       <form id="search-form" class="search-form">
-        <div class="input-group"><label for="input-ra">RA (°)</label><input type="number" step="0.0001" id="input-ra" value="150.1" required></div>
-        <div class="input-group"><label for="input-dec">Dec (°)</label><input type="number" step="0.0001" id="input-dec" value="2.2" required></div>
-        <div class="input-group"><label for="input-radius">FOV (°)</label><input type="number" step="0.01" min="0.01" id="input-radius" value="10" required></div>
+        <div class="input-group"><label for="input-ra">RA (°)</label><input type="number" step="0.0001" id="input-ra" value="133.786245" required></div>
+        <div class="input-group"><label for="input-dec">Dec (°)</label><input type="number" step="0.0001" id="input-dec" value="-7.244372" required></div>
+        <div class="input-group"><label for="input-radius">FOV (°)</label><input type="number" step="0.01" min="0.01" id="input-radius" value="0.0489" required></div>
         <button type="submit" class="ylma-btn primary-gold">IR A COORDENADAS</button>
       </form>
       <form id="fits-url-form" class="fits-url-form">
@@ -47,6 +48,24 @@
         <input id="fits-url-input" type="url" placeholder="https://…/imagen.fits" aria-label="URL directa del archivo FITS">
         <button class="ylma-btn primary-gold" type="submit">CARGAR FITS URL</button>
       </form>
+    </section>
+
+    <section id="archive-search-panel" aria-labelledby="archive-title">
+      <form id="archive-search-form" class="archive-search-form">
+        <label for="archive-collection">Colección IRSA SPHEREx
+          <select id="archive-collection">
+            <option value="spherex_qr3">QR3 · Wide</option>
+            <option value="spherex_qr3_deep">QR3 · Deep</option>
+            <option value="spherex_dr1">DR1 · Wide</option>
+            <option value="spherex_dr1_deep">DR1 · Deep</option>
+            <option value="spherex_dr1_cube">DR1 · All-Sky Cube</option>
+          </select>
+        </label>
+        <button class="ylma-btn primary-gold" type="submit">BUSCAR ARCHIVO SPHEREx</button>
+      </form>
+      <p id="archive-title" class="sr-only">Buscar imágenes en el archivo público SPHEREx de IRSA</p>
+      <p id="archive-status" role="status" aria-live="polite">La búsqueda usa las coordenadas y el campo de visión anteriores.</p>
+      <div id="archive-results" aria-live="polite"></div>
     </section>
 
     <section class="workspace-grid">
@@ -74,7 +93,7 @@
               <div class="split-url-controls"><label for="split-url-right">FITS B</label><input id="split-url-right" type="url" placeholder="URL directa del FITS B"><button id="load-split-right" class="ylma-btn control-btn" type="button">CARGAR</button></div>
             </section>
           </div>
-          <div class="visor-hud-coords"><span id="hud-coords">RA: 150.1000 | Dec: +02.2000</span><span id="hud-survey">SURVEY: DSS2/color</span></div>
+          <div class="visor-hud-coords"><span id="hud-coords">RA: 133.7862 | Dec: -07.2444</span><span id="hud-survey">SURVEY: DSS2/color</span></div>
         </div>
       </div>
 
@@ -83,13 +102,14 @@
           <h2 class="panel-title">DATOS DE OBSERVACIÓN</h2>
           <div class="info-grid">
             <div class="info-row"><span class="info-key">Visor</span><span class="info-val ylma-status" id="info-status">Preparado</span></div>
-            <div class="info-row"><span class="info-key">Centro RA/Dec</span><span class="info-val" id="info-radec">150.100, +2.200</span></div>
+            <div class="info-row"><span class="info-key">Centro RA/Dec</span><span class="info-val" id="info-radec">133.786, -7.244</span></div>
             <div class="info-row"><span class="info-key">FITS activo</span><span class="info-val url-value" id="info-fits-url">Ninguno</span></div>
           </div>
         </section>
         <section class="panel-section">
           <h2 class="panel-title">FITS REMOTOS</h2>
-          <p class="doc-text">Introduce una URL directa a un archivo FITS accesible desde el navegador. El servidor debe permitir solicitudes CORS. No es necesario descargar el archivo manualmente.</p>
+          <p class="doc-text">Introduce una URL directa a un archivo FITS accesible desde el navegador. También puedes buscar productos del archivo IRSA por coordenadas. El acceso directo de Aladin requiere que el origen permita CORS.</p>
+          <a href="https://irsa.ipac.caltech.edu/ibe/data/spherex/" target="_blank" rel="noopener noreferrer" class="ylma-link">Directorio SPHEREx de IRSA →</a><br>
           <a href="https://cds-astro.github.io/aladin-lite/" target="_blank" rel="noopener noreferrer" class="ylma-link">Documentación de Aladin Lite →</a>
         </section>
       </aside>
@@ -118,7 +138,8 @@
     </div>
   </section>
 
-  <script src="https://aladin.cds.unistra.fr/AladinLite/api/v3/latest/aladin.js" charset="utf-8"></script>
+  <script src="https://aladin.cds.unistra.fr/aladin_3.9.0-beta.js" charset="utf-8"></script>
   <script src="script.js"></script>
+  <script src="archive.js"></script>
 </body>
 </html>

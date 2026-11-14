@@ -1,5 +1,5 @@
 import uuid
-from fastapi import FastAPI, Depends, HTTPException, status
+from fastapi import FastAPI, Depends, HTTPException, Query
 from fastapi.middleware.cors import CORSMiddleware
 from sqlalchemy.orm import Session
 
@@ -10,6 +10,7 @@ from backend.schemas import (
     ObservationQuery, StatsResponse
 )
 from backend.services.spherex import SPHERExService
+from backend.services.spherex_archive import SPHERExArchiveService, ArchiveQueryError
 from backend.services.questions import QuestionsService
 from backend.services.statistics import StatisticsService
 
@@ -32,6 +33,7 @@ app.add_middleware(
 )
 
 spherex_service = SPHERExService()
+archive_service = SPHERExArchiveService()
 questions_service = QuestionsService()
 
 @app.get("/api/health")
@@ -46,7 +48,9 @@ def get_config():
         "subtitle": "Explore how the sky changes over time.",
         "version": "1.0.0",
         "demoModeActive": True,
-        "irsaEndpoint": "https://irsa.ipac.caltech.edu/Missions/spherex.html"
+        "irsaEndpoint": "https://irsa.ipac.caltech.edu/Missions/spherex.html",
+        "spherexSiaEndpoint": "https://irsa.ipac.caltech.edu/SIA",
+        "spherexCollections": sorted(archive_service.COLLECTIONS),
     }
 
 @app.get("/api/observations")
@@ -56,6 +60,24 @@ async def get_observations(ra: float = 150.1, dec: float = 2.2, radius: float = 
         return data
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Failed to fetch observations: {str(e)}")
+
+@app.get("/api/spherex/search")
+async def search_spherex_archive(
+    ra: float = Query(..., ge=0, le=360, description="Right ascension in degrees"),
+    dec: float = Query(..., ge=-90, le=90, description="Declination in degrees"),
+    radius: float = Query(0.1, gt=0, le=10, description="Search radius in degrees"),
+    collection: str = Query("spherex_qr3"),
+    limit: int = Query(50, ge=1, le=200),
+):
+    if collection not in archive_service.COLLECTIONS:
+        raise HTTPException(
+            status_code=422,
+            detail=f"Colección no válida. Usa una de: {', '.join(sorted(archive_service.COLLECTIONS))}",
+        )
+    try:
+        return await archive_service.search(ra, dec, radius, collection, limit)
+    except ArchiveQueryError as exc:
+        raise HTTPException(status_code=502, detail=str(exc)) from exc
 
 @app.get("/api/observation/{obs_id}")
 async def get_observation_detail(obs_id: str):

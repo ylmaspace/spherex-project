@@ -3,7 +3,7 @@
 const MAX_FILES = 16;
 const MAX_BYTES = 120 * 1024 * 1024;
 const MAX_BATCH_BYTES = 600 * 1024 * 1024;
-const state = { viewer: null, layers: [], blinking: false, blinkTimer: null, blinkIndex: 0, splitViewers: [], splitMode: false, previousVisibility: [] };
+const state = { viewer: null, layers: [], directoryPath: '', directoryFiles: [], importingDirectory: false, blinking: false, blinkTimer: null, blinkIndex: 0, splitViewers: [], splitMode: false, previousVisibility: [] };
 const $ = (id) => document.getElementById(id);
 const setStatus = (message, progress) => {
     $('multi-status').textContent = message;
@@ -296,11 +296,154 @@ function setProjection() {
     state.viewer.setProjection($('multi-projection').value);
     $('multi-view-subtitle').textContent = $('multi-projection').selectedOptions[0].textContent + ' · marco ICRS';
 }
+
+async function scanIRsaDirectory() {
+    const raw = $('multi-directory-url').value.trim();
+    if (!raw) { $('multi-directory-summary').textContent = 'Introduce la URL de una carpeta IRSA.'; return; }
+    let parsed;
+    try { parsed = new URL(raw); } catch (_) { $('multi-directory-summary').textContent = 'La URL no tiene un formato válido.'; return; }
+    if (parsed.protocol !== 'https:' || parsed.hostname !== 'irsa.ipac.caltech.edu' ||
+        !parsed.pathname.startsWith('/ibe/data/spherex/') || parsed.search || parsed.hash) {
+        $('multi-directory-summary').textContent = 'Solo se admiten directorios HTTPS oficiales de IRSA SPHEREx, sin parámetros.';
+        return;
+    }
+    $('multi-directory-scan').disabled = true;
+    $('multi-directory-import').disabled = true;
+    $('multi-directory-files').replaceChildren();
+    $('multi-directory-summary').textContent = 'Consultando el índice oficial de IRSA…';
+    try {
+        const all = [];
+        const firstUrl = new URL('/api/catalog', window.location.origin);
+        firstUrl.searchParams.set('path', raw);
+        firstUrl.searchParams.set('page', '1');
+        firstUrl.searchParams.set('page_size', '100');
+        const firstResponse = await fetch(firstUrl);
+        const first = await firstResponse.json();
+        if (!firstResponse.ok) throw new Error(first.detail || 'IRSA no ha podido listar este directorio.');
+        const pages = Math.min(Number(first.pages) || 1, 50);
+        all.push(...(first.observations || []));
+        for (let page = 2; page <= pages; page++) {
+            $('multi-directory-summary').textContent = 'Leyendo directorio… página ' + page + '/' + pages;
+            const url = new URL('/api/catalog', window.location.origin);
+            url.searchParams.set('path', raw); url.searchParams.set('page', String(page)); url.searchParams.set('page_size', '100');
+            const response = await fetch(url);
+            const payload = await response.json();
+            if (!response.ok) throw new Error(payload.detail || 'No se pudo leer la página ' + page + '.');
+            all.push(...(payload.observations || []));
+        }
+        state.directoryPath = raw;
+        state.directoryFiles = all;
+        renderDirectoryFiles();
+        $('multi-directory-select-all').disabled = all.length === 0;
+        $('multi-directory-select-all').checked = all.length > 0;
+        $('multi-directory-summary').textContent = all.length + ' FITS encontrados' +
+            (Number(first.count) > all.length ? ' · índice limitado a 5.000 archivos para esta exploración' : '') +
+            (all.length ? ' · selecciónalos y pulsa importar' : ' · no hay FITS en esta carpeta');
+        $('multi-directory-import').disabled = all.length === 0;
+    } catch (error) {
+        $('multi-directory-summary').textContent = 'Error al explorar: ' + error.message;
+    } finally {
+        $('multi-directory-scan').disabled = false;
+    }
+}
+function renderDirectoryFiles() {
+    const container = $('multi-directory-files');
+    container.replaceChildren();
+    if (!state.directoryFiles.length) {
+        const empty = document.createElement('div'); empty.className = 'multi-empty'; empty.textContent = 'No se han encontrado archivos FITS.';
+        container.appendChild(empty); return;
+    }
+    state.directoryFiles.forEach((file, index) => {
+        const label = document.createElement('label'); label.className = 'multi-directory-file';
+        const checkbox = document.createElement('input'); checkbox.type = 'checkbox'; checkbox.checked = true;
+        checkbox.dataset.index = String(index); checkbox.addEventListener('change', updateDirectorySelection);
+        const text = document.createElement('span'); text.textContent = file.name;
+        const meta = document.createElement('small'); meta.textContent = file.size_bytes ? (file.size_bytes / 1048576).toFixed(1) + ' MB' : 'Tamaño no indicado por IRSA';
+        text.appendChild(meta); label.append(checkbox, text); container.appendChild(label);
+    });
+    updateDirectorySelection();
+}
+function updateDirectorySelection() {
+    const selected = $('multi-directory-files').querySelectorAll('input[type="checkbox"]:checked').length;
+    const total = state.directoryFiles.length;
+    $('multi-directory-summary').textContent = selected + ' de ' + total + ' FITS seleccionados';
+    $('multi-directory-import').disabled = selected === 0 || state.importingDirectory;
+    $('multi-directory-select-all').checked = total > 0 && selected === total;
+}
+async function importDirectorySelection() {
+    if (state.importingDirectory) return;
+    const selectedIndexes = Array.from($('multi-directory-files').querySelectorAll('input[type="checkbox"]:checked'))
+        .map(input => Number(input.dataset.index));
+    const selected = selectedIndexes.map(index => state.directoryFiles[index]).filter(Boolean);
+    if (!selected.length) return;
+    if (!confirm('Se procesarán ' + selected.length + ' archivos FITS desde IRSA. La descarga y el análisis se harán desde el servidor. ¿Continuar?')) return;
+    state.importingDirectory = true;
+    $('multi-directory-import').disabled = true;
+    $('multi-directory-scan').disabled = true;
+    stopBlink();
+    let loaded = 0, failed = 0;
+    try {
+        const viewer = await initSphere();
+        viewer.setProjection($('multi-projection').value);
+        for (let offset = 0; offset < selected.length; offset += MAX_FILES) {
+            const batch = selected.slice(offset, offset + MAX_FILES);
+            $('multi-directory-summary').textContent = 'Descargando lote ' + (Math.floor(offset / MAX_FILES) + 1) +
+                ' · ' + Math.min(offset + batch.length, selected.length) + '/' + selected.length;
+            const response = await fetch('/api/fits/import-directory', {
+                method: 'POST', headers: {'Content-Type':'application/json'},
+                body: JSON.stringify({directory_path: state.directoryPath, files: batch.map(file => file.path)})
+            });
+            const payload = await response.json();
+            if (!response.ok) throw new Error(payload.detail || 'El servidor no pudo importar el lote.');
+            const results = payload.results || [];
+            for (const result of results) {
+                try {
+                    const layerId = 'ylma-multifits-' + result.id;
+                    const rendered = await displayLayer(viewer, result, layerId);
+                    if (rendered.image && typeof rendered.image.setOpacity === 'function') rendered.image.setOpacity(0.58);
+                    state.layers.push({
+                        id: layerId, filename: result.filename, image: rendered.image,
+                        ra: Number.isFinite(rendered.ra) ? rendered.ra : result.ra,
+                        dec: Number.isFinite(rendered.dec) ? rendered.dec : result.dec,
+                        width: result.width, height: result.height, display_url: result.display_url,
+                        visible: true, opacity: 0.58
+                    });
+                    loaded++; renderLayerList();
+                    if (loaded === 1 && Number.isFinite(rendered.ra) && Number.isFinite(rendered.dec)) viewer.gotoRaDec(rendered.ra, rendered.dec);
+                } catch (error) {
+                    failed++;
+                    console.warn('No se pudo representar ' + result.filename, error);
+                }
+            }
+            failed += (payload.errors || []).length;
+            const details = (payload.errors || []).map(item => item.filename + ': ' + item.error).join(' · ');
+            $('multi-directory-summary').textContent = 'Importados ' + loaded + '/' + selected.length +
+                (failed ? ' · ' + failed + ' errores' : '') + (details ? ' · ' + details : '');
+        }
+        setStatus('Importación de directorio finalizada: ' + loaded + ' FITS incorporados' + (failed ? ', ' + failed + ' errores.' : '.'), 100);
+    } catch (error) {
+        setStatus('Importación de directorio interrumpida: ' + error.message, 0);
+        $('multi-directory-summary').textContent = error.message;
+    } finally {
+        state.importingDirectory = false;
+        $('multi-directory-import').disabled = state.directoryFiles.length === 0;
+        $('multi-directory-scan').disabled = false;
+        $('multi-blink-btn').disabled = state.layers.length < 2;
+        $('multi-split-btn').disabled = state.layers.length < 2;
+    }
+}
+
 $('multi-load-btn').addEventListener('click', loadSelectedFiles);
 $('multi-blink-btn').addEventListener('click', startBlink);
 $('multi-split-btn').addEventListener('click', () => state.splitMode ? closeSplit() : openSplit());
 $('multi-sphere-btn').addEventListener('click', closeSplit);
 $('multi-blink-interval').addEventListener('change', changeBlinkInterval);
 $('multi-projection').addEventListener('change', setProjection);
+$('multi-directory-scan').addEventListener('click', scanIRsaDirectory);
+$('multi-directory-import').addEventListener('click', importDirectorySelection);
+$('multi-directory-select-all').addEventListener('change', () => {
+    $('multi-directory-files').querySelectorAll('input[type=checkbox]').forEach(input => { input.checked = $('multi-directory-select-all').checked; });
+    updateDirectorySelection();
+});
 window.addEventListener('beforeunload', () => stopBlink(false));
 })();

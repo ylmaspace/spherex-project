@@ -371,7 +371,7 @@ function stopBlinkModal() {
 async function queryBackendObservations(ra, dec, radius) {
     const currentEpoch = state.epochs[state.currentEpochIndex];
     try {
-        const response = await fetch(`http://127.0.0.1:8000/api/observations?ra=${ra}&dec=${dec}&radius=${radius}&timestamp=${encodeURIComponent(currentEpoch.time)}&fits=${encodeURIComponent(currentEpoch.fitsName)}`);
+        const response = await fetch(`/api/observations?ra=${ra}&dec=${dec}&radius=${radius}&timestamp=${encodeURIComponent(currentEpoch.time)}&fits=${encodeURIComponent(currentEpoch.fitsName)}`);
         if (!response.ok) throw new Error("Error en FastAPI");
         
         const data = await response.json();
@@ -391,7 +391,7 @@ async function queryBackendModal(ra, dec, radius) {
     container.innerHTML = `<div style="color: var(--ylma-gold); text-align: center; padding: 20px;">Analizando RA: ${ra}, Dec: ${dec} en el minuto ${currentEpoch.time}...</div>`;
 
     try {
-        const response = await fetch(`http://127.0.0.1:8000/api/observations?ra=${ra}&dec=${dec}&radius=${radius}&timestamp=${encodeURIComponent(currentEpoch.time)}&fits=${encodeURIComponent(currentEpoch.fitsName)}`);
+        const response = await fetch(`/api/observations?ra=${ra}&dec=${dec}&radius=${radius}&timestamp=${encodeURIComponent(currentEpoch.time)}&fits=${encodeURIComponent(currentEpoch.fitsName)}`);
         const data = await response.json();
         
         container.innerHTML = '';

@@ -358,10 +358,12 @@ async function fetchDirectoryTree(raw, recursive = true) {
         const first = await firstResponse.json();
         if (!firstResponse.ok) throw new Error(first.detail || 'IRSA no ha podido listar ' + current.path);
         const dirs = first.directories || [];
-        const pages = Math.min(Number(first.fits_pages) || 1, 100);
+        const totalPages = Number(first.fits_pages) || 1;
+        if (totalPages > 100) throw new Error('Una carpeta contiene más de 10.000 FITS; limita la exploración a un subdirectorio.');
+        const pages = totalPages;
         for (const file of (first.fits_files || first.observations || [])) {
             files.push({...file, directory_path: current.path});
-            if (files.length >= MAX_FILES) throw new Error('Se alcanzó el límite de seguridad de 5.000 FITS por exploración.');
+            if (files.length > MAX_FILES) throw new Error('Se alcanzó el límite de seguridad de 5.000 FITS por exploración.');
         }
         for (let page = 2; page <= pages; page++) {
             $('multi-directory-summary').textContent = 'Leyendo ' + current.path + ' · página ' + page + '/' + pages;

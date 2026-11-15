@@ -696,37 +696,35 @@ function setActiveLayer(id) {
     ['layer-real', 'layer-fits'].forEach((buttonId) => byId(buttonId)?.classList.toggle('active', buttonId === id));
 }
 
-async function initAladinViewer() {
-    if (aladin) {
-        aladin.invalidateSize();
-        return;
-    }
-    if (!window.A?.init) {
-        setObservationStatus('No se pudo cargar Aladin Lite; comprueba la conexión al servicio CDS.', '');
-        return;
-    }
-    try {
-        await A.init;
-        aladin = A.aladin('#aladin-lite-div', {
-            fov: state.currentRadius, projection: 'AIT', cooFrame: 'equatorial',
-            showCooGridControl: true, showSimbadPointerControl: true, showCooGrid: true,
-            survey: 'P/DSS2/color', target: `${state.currentRA} ${state.currentDec}`
-        });
-        aladin.on('positionChanged', (ra, dec) => {
-            if (byId('hud-coords')) byId('hud-coords').textContent =
-                `RA: ${ra.toFixed(4)} | Dec: ${dec >= 0 ? '+' : ''}${dec.toFixed(4)}`;
-        });
-        aladin.on('mouseMove', (position) => {
-            if (!position || !Number.isFinite(position.ra) || !Number.isFinite(position.dec)) return;
-            const cursor = byId('hud-cursor-coords');
-            if (cursor) cursor.textContent = `CURSOR · RA ${position.ra.toFixed(6)}° | Dec ${position.dec >= 0 ? '+' : ''}${position.dec.toFixed(6)}°`;
-        });
-        aladin.gotoRaDec(state.currentRA, state.currentDec);
-        rebuildSkyMarkers();
-    } catch (error) {
-        console.error('Aladin initialization failed', error);
-        setObservationStatus('Error al iniciar el visor astronómico.', '');
-    }
+let aladinApiLoadPromise=null;
+async function ensureAladinApi(){
+ if(window.A?.init&&typeof window.A.aladin==='function'){await window.A.init;return window.A;}
+ if(aladinApiLoadPromise)return aladinApiLoadPromise;
+ aladinApiLoadPromise=new Promise((resolve,reject)=>{
+  const s=document.createElement('script');s.src='https://aladin.cds.unistra.fr/AladinLite/api/v3/latest/aladin.js';s.async=true;
+  const timer=setTimeout(()=>reject(new Error('CDS no respondió en 20 segundos.')),20000);
+  s.onload=async()=>{try{if(!window.A?.init)throw new Error('La API de Aladin no está disponible.');await window.A.init;clearTimeout(timer);resolve(window.A);}catch(err){clearTimeout(timer);reject(err);}};
+  s.onerror=()=>{clearTimeout(timer);reject(new Error('No se pudo descargar aladin.js desde CDS. La red podría bloquear el servicio.'));};
+  document.head.appendChild(s);
+ }).catch(err=>{aladinApiLoadPromise=null;throw err;});
+ return aladinApiLoadPromise;
+}
+function showAladinRetry(error){
+ const host=byId('visor-stage');if(!host)return;host.querySelector('.aladin-error-panel')?.remove();
+ const panel=document.createElement('div');panel.className='aladin-error-panel';
+ panel.innerHTML='<strong>Aladin Lite is unavailable / Aladin Lite no está disponible</strong><p></p><button type="button" class="ylma-btn primary-gold">Retry / Reintentar</button>';
+ panel.querySelector('p').textContent=error?.message||'CDS connection error';
+ panel.querySelector('button').addEventListener('click',()=>{panel.remove();initAladinViewer();});host.appendChild(panel);
+}
+async function initAladinViewer(){
+ if(aladin){aladin.invalidateSize();return;}
+ try{
+  await ensureAladinApi();
+  aladin=A.aladin('#aladin-lite-div',{fov:state.currentRadius,projection:'AIT',cooFrame:'equatorial',showCooGridControl:true,showSimbadPointerControl:true,showCooGrid:true,survey:'P/DSS2/color',target:`${state.currentRA} ${state.currentDec}`});
+  aladin.on('positionChanged',(ra,dec)=>{if(byId('hud-coords'))byId('hud-coords').textContent=`RA: ${ra.toFixed(4)} | Dec: ${dec>=0?'+':''}${dec.toFixed(4)}`;});
+  aladin.on('mouseMove',position=>{if(!position||!Number.isFinite(position.ra)||!Number.isFinite(position.dec))return;const cursor=byId('hud-cursor-coords');if(cursor)cursor.textContent=`CURSOR · RA ${position.ra.toFixed(6)}° | Dec ${position.dec>=0?'+':''}${position.dec.toFixed(6)}°`;});
+  aladin.gotoRaDec(state.currentRA,state.currentDec);rebuildSkyMarkers();
+ }catch(error){console.error('Aladin initialization failed',error);setObservationStatus('Error al iniciar el visor astronómico: '+error.message,'');showAladinRetry(error);}
 }
 
 async function searchObservations() {

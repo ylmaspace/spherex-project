@@ -628,7 +628,7 @@ async function loadLocalFits(file, existingRecordId = null) {
     }
 }
 
-async async function loadRemoteObservationFits(item) {
+async function loadRemoteObservationFits(item) {
     const sourceUrl = observationUrl(item);
     if (!sourceUrl) { setObservationStatus('This observation has no direct SPHEREx FITS product URL.', 'No FITS product'); return; }
     const input = byId('fits-url-input');

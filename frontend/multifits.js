@@ -31,28 +31,46 @@ async function readApiResponse(response) {
 
 function loadAladin() {
     if (aladinReadyPromise) return aladinReadyPromise;
-    aladinReadyPromise = new Promise((resolve, reject) => {
-        const verify = () => {
-            const api = window.A;
-            if (!api || typeof api.aladin !== 'function') {
-                reject(new Error('Aladin Lite no ha cargado su API.'));
-                return;
-            }
-            Promise.resolve(api.init).then(() => {
-                if (typeof api.aladin !== 'function') throw new Error('Aladin Lite finished loading without exposing A.aladin.');
-                resolve(api);
-            }).catch(reject);
-        };
+    aladinReadyPromise = (async () => {
+        const sources = [
+            'https://aladin.cds.unistra.fr/AladinLite/api/v3/latest/aladin.js',
+            'https://aladin.u-strasbg.fr/AladinLite/api/v3/latest/aladin.js'
+        ];
         if (window.A && typeof window.A.aladin === 'function') {
-            verify();
-            return;
+            await window.A.init;
+            return window.A;
         }
-        const script = document.createElement('script');
-        script.src = 'https://aladin.cds.unistra.fr/AladinLite/api/v3/latest/aladin.js';
-        script.onload = verify;
-        script.onerror = () => reject(new Error('Could not load stable Aladin Lite v3.'));
-        document.head.appendChild(script);
-    }).catch(error => {
+        let lastError = null;
+        for (const src of sources) {
+            try {
+                await new Promise((resolve, reject) => {
+                    const script = document.createElement('script');
+                    script.src = src;
+                    script.async = true;
+                    const timer = setTimeout(() => {
+                        script.remove();
+                        reject(new Error('Timed out loading Aladin Lite from ' + new URL(src).hostname));
+                    }, 15000);
+                    script.onload = () => { clearTimeout(timer); resolve(); };
+                    script.onerror = () => {
+                        clearTimeout(timer);
+                        script.remove();
+                        reject(new Error('Could not load Aladin Lite from ' + new URL(src).hostname));
+                    };
+                    document.head.appendChild(script);
+                });
+                if (!window.A || typeof window.A.aladin !== 'function') {
+                    throw new Error('Aladin Lite loaded without exposing its API.');
+                }
+                await window.A.init;
+                return window.A;
+            } catch (error) {
+                lastError = error;
+                console.warn('Aladin Lite source failed:', src, error);
+            }
+        }
+        throw new Error('Aladin Lite could not be loaded from either official CDS endpoint. ' + (lastError?.message || ''));
+    })().catch(error => {
         aladinReadyPromise = null;
         throw error;
     });

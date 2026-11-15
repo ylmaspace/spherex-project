@@ -700,13 +700,28 @@ let aladinApiLoadPromise=null;
 async function ensureAladinApi(){
  if(window.A?.init&&typeof window.A.aladin==='function'){await window.A.init;return window.A;}
  if(aladinApiLoadPromise)return aladinApiLoadPromise;
- aladinApiLoadPromise=new Promise((resolve,reject)=>{
-  const s=document.createElement('script');s.src='https://aladin.cds.unistra.fr/AladinLite/api/v3/latest/aladin.js';s.async=true;
-  const timer=setTimeout(()=>reject(new Error('CDS did not respond within 20 seconds.')),20000);
-  s.onload=async()=>{try{if(!window.A?.init)throw new Error('The Aladin API is unavailable.');await window.A.init;clearTimeout(timer);resolve(window.A);}catch(err){clearTimeout(timer);reject(err);}};
-  s.onerror=()=>{clearTimeout(timer);reject(new Error('Could not download aladin.js from CDS. The network may be blocking the service.'));};
-  document.head.appendChild(s);
- }).catch(err=>{aladinApiLoadPromise=null;throw err;});
+ aladinApiLoadPromise=(async()=>{
+  const sources=[
+   'https://aladin.cds.unistra.fr/AladinLite/api/v3/latest/aladin.js',
+   'https://aladin.u-strasbg.fr/AladinLite/api/v3/latest/aladin.js'
+  ];
+  let lastError=null;
+  for(const src of sources){
+   try{
+    await new Promise((resolve,reject)=>{
+     const script=document.createElement('script');script.src=src;script.async=true;
+     const timer=setTimeout(()=>{script.remove();reject(new Error('Timed out loading Aladin Lite from '+new URL(src).hostname));},15000);
+     script.onload=()=>{clearTimeout(timer);resolve();};
+     script.onerror=()=>{clearTimeout(timer);script.remove();reject(new Error('Could not load Aladin Lite from '+new URL(src).hostname));};
+     document.head.appendChild(script);
+    });
+    if(!window.A?.init||typeof window.A.aladin!=='function')throw new Error('Aladin Lite loaded without exposing its API.');
+    await window.A.init;
+    return window.A;
+   }catch(error){lastError=error;console.warn('Aladin Lite source failed:',src,error);}
+  }
+  throw new Error('Aladin Lite could not be loaded from either official CDS endpoint. '+(lastError?.message||''));
+ })().catch(err=>{aladinApiLoadPromise=null;throw err;});
  return aladinApiLoadPromise;
 }
 function showAladinRetry(error){

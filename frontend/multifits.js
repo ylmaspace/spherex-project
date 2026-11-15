@@ -6,9 +6,13 @@ const MAX_PACKAGE_BYTES = 240 * 1024 * 1024;
 let aladinReadyPromise = null;
 const state = { viewer: null, layers: [], directoryPath: '', directoryFiles: [], importedDirectoryPaths: new Set(), importingDirectory: false, blinking: false, blinkTimer: null, blinkIndex: 0, splitViewers: [], splitMode: false, previousVisibility: [] };
 const $ = (id) => document.getElementById(id);
-const setStatus = (message, progress) => {
+const setStatus = (message, progress, indeterminate = false) => {
     $('multi-status').textContent = message;
-    if (Number.isFinite(progress)) $('multi-progress-bar').style.width = Math.max(0, Math.min(100, progress)) + '%';
+    const track = $('multi-progress-bar')?.parentElement;
+    if (track) track.classList.toggle('is-processing', Boolean(indeterminate));
+    if (Number.isFinite(progress)) {
+        $('multi-progress-bar').style.width = indeterminate ? '36%' : Math.max(0, Math.min(100, progress)) + '%';
+    }
 };
 const selectedInterval = () => [2000, 1000, 500, 333].includes(Number($('multi-blink-interval').value)) ? Number($('multi-blink-interval').value) : 1000;
 const safeName = (name) => String(name || 'FITS').replace(/[<>&"]/g, '');
@@ -117,22 +121,44 @@ function buildPackages(items) {
 function uploadFits(file, progressCallback) {
     return new Promise((resolve, reject) => {
         const xhr = new XMLHttpRequest();
+        let processingTimer = null;
+        let processingStartedAt = 0;
+        const clearTimer = () => {
+            if (processingTimer) clearInterval(processingTimer);
+            processingTimer = null;
+        };
+        const report = (percent, stage, message) => {
+            if (typeof progressCallback === 'function') progressCallback(percent, stage, message);
+        };
         xhr.open('POST', '/api/fits/upload');
-        xhr.timeout = 8 * 60 * 1000;
+        xhr.timeout = 12 * 60 * 1000;
         xhr.responseType = 'json';
         xhr.upload.onprogress = (event) => {
-            if (event.lengthComputable) progressCallback(event.loaded / event.total * 85);
+            if (event.lengthComputable) report(Math.min(74, event.loaded / event.total * 74), 'uploading',
+                'Uploading ' + file.name + ' · ' + (event.loaded / 1048576).toFixed(1) + ' / ' +
+                (event.total / 1048576).toFixed(1) + ' MB');
+        };
+        xhr.upload.onload = () => {
+            processingStartedAt = Date.now();
+            report(78, 'processing', 'Upload complete. The backend is decoding FITS data and preparing the sky layer.');
+            processingTimer = setInterval(() => {
+                const elapsed = Math.floor((Date.now() - processingStartedAt) / 1000);
+                report(78, 'processing', 'Server is still processing ' + file.name + ' · ' +
+                    Math.floor(elapsed / 60) + ':' + String(elapsed % 60).padStart(2, '0') + ' elapsed. Keep this tab open.');
+            }, 10000);
         };
         xhr.onload = () => {
+            clearTimer();
             let payload = xhr.response;
             if (!payload || typeof payload !== 'object') {
                 try { payload = JSON.parse(xhr.responseText || '{}'); } catch (_) { payload = {}; }
             }
             if (xhr.status >= 200 && xhr.status < 300) resolve(payload);
-            else reject(new Error(payload.detail || 'The server responded with HTTP ' + xhr.status + '.'));
+            else reject(new Error(payload.detail || payload.message || 'The server responded with HTTP ' + xhr.status + '.'));
         };
-        xhr.onerror = () => reject(new Error('The connection was lost during upload.'));
-        xhr.ontimeout = () => reject(new Error('The server timed out while processing ' + file.name + '.'));
+        xhr.onerror = () => { clearTimer(); reject(new Error('The connection was lost while the server was processing ' + file.name + '.')); };
+        xhr.ontimeout = () => { clearTimer(); reject(new Error('The server timed out while processing ' + file.name + ' after 12 minutes.')); };
+        xhr.onabort = () => { clearTimer(); reject(new Error('The FITS upload was cancelled.')); };
         const form = new FormData();
         form.append('file', file, file.name);
         xhr.send(form);
@@ -184,9 +210,14 @@ async function loadSelectedFiles() {
             for (const file of pack) {
                 try {
                     setStatus('Subiendo ' + file.name + ' · ' + (completed + 1) + '/' + files.length, completed / files.length * 100);
-                    const result = await uploadFits(file, percent => {
-                        setStatus('Batch ' + (packageIndex + 1) + '/' + packages.length + ' · ' + file.name + ' · ' + Math.round(percent) + '%',
-                            ((completed + percent / 100) / files.length) * 100);
+                    const result = await uploadFits(file, (percent, stage, message) => {
+                        const processing = stage === 'processing';
+                        setStatus(
+                            processing ? 'SERVER PROCESSING · ' + file.name + ' · ' + message :
+                                'Batch ' + (packageIndex + 1) + '/' + packages.length + ' · ' + file.name + ' · ' + Math.round(percent) + '%',
+                            ((completed + percent / 100) / files.length) * 100,
+                            processing
+                        );
                     });
                     if (!result.id || !result.display_url) throw new Error('The backend did not return a processed FITS file.');
                     const layerId = 'ylma-multifits-' + result.id;

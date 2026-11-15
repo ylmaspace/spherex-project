@@ -647,8 +647,7 @@ function setActiveLayer(id) {
     ['layer-real', 'layer-fits'].forEach((buttonId) => byId(buttonId)?.classList.toggle('active', buttonId === id));
 }
 
-let aladinApiLoadPromise=null;
-async // Aladin Lite is not loaded by the main Explorer. It is isolated to Multi-FITS Lab.
+// Aladin Lite is not loaded by the main Explorer. It is isolated to Multi-FITS Lab.
 
 async function searchObservations() {
     if (requestController) requestController.abort();

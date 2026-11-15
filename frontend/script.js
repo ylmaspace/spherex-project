@@ -612,6 +612,7 @@ async function loadLocalFits(file, existingRecordId = null) {
         showFitsProgress('INCORPORANDO FITS IMAGE', 'Subiendo ' + name + '…', 0);
         setObservationStatus('Preparando FITS: ' + name, 'Procesando');
         const result = await uploadFitsToBackend(file, (percent, phase) => {
+            if (token !== fitsLoadToken) return;
             const processing = phase?.stage === 'processing';
             showFitsProgress(
                 processing ? 'PROCESSING FITS ON SERVER' : 'UPLOADING FILE',
@@ -619,11 +620,11 @@ async function loadLocalFits(file, existingRecordId = null) {
                 percent, processing
             );
         });
+        if (token !== fitsLoadToken) return false;
         if (!result || !result.id || !result.preview_url || !Number(result.width) || !Number(result.height)) {
             throw new Error('The server did not return a valid FITS preview.');
         }
         showFitsProgress('DECODING SCIENCE DATA', 'Reading HDU, image data, and WCS coordinates…', 84);
-        if (token !== fitsLoadToken) return false;
         const hasWcs = updateSkyCoordinates(result);
         const localId = existingRecordId || (crypto.randomUUID ? crypto.randomUUID() : 'fits-' + Date.now());
         const record = {
@@ -675,28 +676,38 @@ async function loadLocalFits(file, existingRecordId = null) {
             ? 'RA ' + Number(result.ra).toFixed(5) + '° · Dec ' + Number(result.dec).toFixed(5) + '°'
             : 'No WCS data · image displayed without sky coordinates';
         localViewer.hidden = false;
-        let savedToSkyMap = true;
-        try {
-            await saveSkyRecord(record);
-            savedSkyRecords = await getSavedSkyRecords();
-            renderSavedSkyMap();
-        } catch (saveError) {
-            savedToSkyMap = false;
-            console.warn('FITS rendered, but the optional sky-map save failed:', saveError);
-        }
+        // Saving is deliberately fire-and-forget: slow or blocked IndexedDB must
+        // never hold the successfully decoded science image behind the progress overlay.
+        saveSkyRecord(record)
+            .then(() => getSavedSkyRecords())
+            .then((records) => {
+                if (token !== fitsLoadToken) return;
+                savedSkyRecords = records;
+                renderSavedSkyMap();
+                setObservationStatus('FITS image rendered and saved: ' + name,
+                    'HDU ' + result.hdu_index + ' · ' + result.width + '×' + result.height + (hasWcs ? '' : ' · sin WCS'));
+            })
+            .catch((saveError) => {
+                console.warn('FITS rendered, but the optional sky-map save failed:', saveError);
+                if (token === fitsLoadToken) {
+                    setObservationStatus('FITS image rendered: ' + name + ' · browser map storage unavailable',
+                        'HDU ' + result.hdu_index + ' · ' + result.width + '×' + result.height);
+                }
+            });
         setActiveLayer('layer-fits');
         if (byId('info-epoch-label')) byId('info-epoch-label').textContent = name;
         if (byId('hud-survey')) byId('hud-survey').textContent = hasWcs ? 'FITS LOCAL · WCS' : 'FITS LOCAL · SIN WCS';
         if (byId('timeline-epoch-title')) byId('timeline-epoch-title').textContent = name;
         if (byId('fits-dropzone')) byId('fits-dropzone').classList.add('fits-loaded');
         setObservationStatus(
-            savedToSkyMap ? 'FITS image rendered and saved: ' + name : 'FITS image rendered: ' + name + ' · not saved to the optional sky map',
+            'FITS image rendered: ' + name,
             'HDU ' + result.hdu_index + ' · ' + result.width + '×' + result.height + (hasWcs ? '' : ' · sin WCS')
         );
         showFitsProgress('IMAGE ADDED', 'The image is already visible in the local viewer.', 100);
         setTimeout(hideFitsProgress, 650);
         return true;
     } catch (error) {
+        if (token !== fitsLoadToken) return false;
         hideFitsProgress();
         console.error('FITS upload failed', error);
         setObservationStatus('Could not add FITS file: ' + error.message, 'Load error');

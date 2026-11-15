@@ -276,15 +276,6 @@ body {
     overflow: hidden;
 }
 
-#aladin-lite-div {
-    width: 100% !important;
-    height: 100% !important;
-    position: absolute !important;
-    top: 0 !important;
-    left: 0 !important;
-    z-index: 1;
-}
-
 /* --- ESTILOS VISTA DIVIDIDA (SPLIT VIEW) --- */
 #split-view-container {
     display: none;
@@ -586,10 +577,6 @@ body {
     overflow-y: auto;
 }
 
-.aladin-zoom-control {
-    bottom: 90px !important;
-}
-
 @media (max-width: 900px) {
     body { overflow: auto; height: auto; min-height: 100vh; }
     .view-container { width: 100%; min-height: 100vh; height: auto; }
@@ -859,10 +846,6 @@ body {
 .visor-hud-coords{flex-wrap:wrap;max-width:calc(100% - 24px)}
 .fits-local-toolbar span{font-size:.66rem;font-variant-numeric:tabular-nums}
 @media(max-width:700px){.visor-hud-coords{right:12px;gap:6px;font-size:.62rem}.landing-cta-container{align-items:stretch}.landing-cta-container .ylma-btn{width:100%}}
-
-
-/* CDS Aladin fallback. The official Aladin logo and link remain untouched. */
-.aladin-error-panel{position:absolute;inset:18px;z-index:30;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:12px;padding:24px;text-align:center;background:rgba(3,8,11,.94);border:1px solid rgba(255,187,0,.45);color:#fff;border-radius:8px}.aladin-error-panel p{max-width:620px;color:#c5cdd2;font-size:.85rem;overflow-wrap:anywhere}.aladin-error-panel strong{color:#ffbb00}
 
 
 /* Local FITS comparison panes */

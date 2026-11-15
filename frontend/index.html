@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, height=device-height, initial-scale=1.0, user-scalable=no">
-    <title>YLMA SPHEREx Explorer | Aladin Lite Engine</title>
+    <title>YLMA SPHEREx Explorer | Independent FITS Viewer</title>
     <meta name="theme-color" content="#050a0d">
     <link rel="manifest" href="manifest.webmanifest">
     <link rel="icon" type="image/png" href="https://raw.githubusercontent.com/ylmaspace/assets/main/Sphere%20X%20Explorer.png">
@@ -12,10 +12,7 @@
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Exo+2:wght@300;400;500;600;700&family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
     
-    <!-- Aladin Lite CSS -->
-    <link rel="stylesheet" href="https://aladin.cds.unistra.fr/AladinLite/api/v3/latest/aladin.min.css" />
-    
-    <link rel="stylesheet" href="styles.css">
+<link rel="stylesheet" href="styles.css">
 </head>
 <body>
 
@@ -24,8 +21,8 @@
         <div class="landing-bg"></div>
         <div class="landing-content">
             <div class="brand-badge">YLMA SPACE</div>
-            <h1 class="landing-title">SPHEREx & ALADIN LITE</h1>
-            <p class="landing-subtitle">Time-domain exploration, split view and blinking comparison.</p>
+            <h1 class="landing-title">SPHEREx FITS EXPLORER</h1>
+            <p class="landing-subtitle">Independent FITS visualization, analysis and image comparison.</p>
             
             <div class="landing-cta-container">
                 <button id="explore-btn" class="ylma-btn primary-gold">LAUNCH EXPLORER</button>
@@ -83,7 +80,7 @@
             <!-- LEFT VISOR AREA -->
             <div class="visor-container">
                 <div class="visor-toolbar">
-                    <div class="visor-mode-title" id="current-mode-label">ALADIN LITE SKY ATLAS (SPHEREx DR1 + QR3)</div>
+                    <div class="visor-mode-title" id="current-mode-label">INDEPENDENT FITS VIEWER</div>
                     <div class="visor-controls-group">
                         <button class="ylma-btn control-btn active" id="layer-real">DSS / VizieR</button>
                         <button class="ylma-btn control-btn" id="layer-fits">IBE FITS</button>
@@ -131,7 +128,7 @@
                         </div>
                     </div>
                     <!-- Single container -->
-                    <div id="aladin-lite-div"></div>
+                    
                     <section id="fits-local-viewer" class="fits-local-viewer" aria-label="Visor FITS independiente" hidden>
                         <div class="fits-local-toolbar">
                             <strong id="fits-local-title">FITS IMAGE</strong>
@@ -150,24 +147,6 @@
                         <div class="split-local-pane"><img id="split-local-left" alt="First FITS image"><span id="split-local-left-title">FITS A</span></div>
                         <div class="split-local-pane"><img id="split-local-right" alt="Second FITS image"><span id="split-local-right-title">FITS B</span></div>
                     </section>
-                    <!-- Contenedor de Vista Dividida (Dual Visor con Deslizadores Independientes) -->
-                    <div id="split-view-container">
-                        <div class="split-pane">
-                            <div id="aladin-left-div" class="split-map"></div>
-                            <div class="split-hud-bar">
-                                <span id="split-left-title">EPOCH A: Select an observation</span>
-                                <input type="text" inputmode="numeric" pattern="[0-9]*" id="split-index-left" class="epoch-index-input" value="1" aria-label="Epoch A observation index">
-                            </div>
-                        </div>
-                        <div class="split-pane">
-                            <div id="aladin-right-div" class="split-map"></div>
-                            <div class="split-hud-bar">
-                                <span id="split-right-title">EPOCH B: Select an observation</span>
-                                <input type="text" inputmode="numeric" pattern="[0-9]*" id="split-index-right" class="epoch-index-input" value="1" aria-label="Epoch B observation index">
-                            </div>
-                        </div>
-                    </div>
-
                     <div class="visor-hud-coords">
                         <span id="hud-coords">CENTER · RA: 150.1000 | Dec: +02.2000</span>
                         <span id="hud-cursor-coords">CURSOR · RA —° | Dec —°</span>
@@ -303,7 +282,6 @@
         </div>
     </div>
 
-    <!-- Aladin Lite JS API -->
     <script src="script.js"></script>
 </body>
 </html>

@@ -96,3 +96,40 @@ body.multi-fits-page{display:block!important;position:static!important;height:au
 .multi-intro h1{font-size:clamp(1.8rem,4vw,2.8rem);letter-spacing:.025em;color:#fff;margin:10px 0}
 .multi-intro p{margin:0 auto}
 @media(max-width:720px){.multi-brand-mark{flex-basis:40px;width:40px;height:40px}.multi-hero-logo{width:clamp(160px,48vw,220px);max-height:220px;margin-bottom:16px}.multi-intro{padding-inline:4px}}
+
+
+/* Clear beta disclosure for the experimental Multi-FITS Lab module. */
+.multi-beta-notice {
+    display: flex;
+    align-items: flex-start;
+    gap: 12px;
+    max-width: 920px;
+    margin: 14px auto 4px;
+    padding: 12px 15px;
+    border: 1px solid rgba(255,187,0,.42);
+    border-left: 3px solid #ffbb00;
+    border-radius: 5px;
+    background: rgba(255,187,0,.065);
+    text-align: left;
+}
+.multi-beta-tag {
+    flex: 0 0 auto;
+    padding: 4px 7px;
+    border: 1px solid rgba(255,187,0,.6);
+    border-radius: 3px;
+    color: #ffcf55;
+    font-size: .65rem;
+    font-weight: 800;
+    letter-spacing: .12em;
+}
+.multi-beta-notice p {
+    margin: 0;
+    color: #c0cbd2;
+    font-size: .72rem;
+    line-height: 1.55;
+}
+.multi-beta-notice strong { color: #ffcf55; }
+@media(max-width:560px) {
+    .multi-beta-notice { gap: 8px; padding: 10px; }
+    .multi-beta-notice p { font-size: .67rem; }
+}

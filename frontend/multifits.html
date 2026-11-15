@@ -1,0 +1,137 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="theme-color" content="#050a0d">
+    <title>SphereX Explorer | YLMA Space</title>
+    <link rel="manifest" href="manifest.webmanifest">
+    <link rel="icon" type="image/png" href="https://raw.githubusercontent.com/ylmaspace/assets/main/Sphere%20X%20Explorer.png">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Exo+2:wght@300;400;500;600;700&family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="styles.css?v=fits-progress-20261115">
+    <link rel="stylesheet" href="https://aladin.cds.unistra.fr/AladinLite/api/v3/latest/aladin.min.css">
+    <link rel="stylesheet" href="multifits.css?v=fits-progress-20261115">
+</head>
+<body class="multi-fits-page">
+    <header class="multi-header">
+        <a class="multi-brand" href="index.html">
+            <img class="multi-brand-mark" src="https://raw.githubusercontent.com/ylmaspace/assets/main/Sphere%20X%20Explorer.png" alt="SphereX Explorer">
+            <span><strong>SphereX Explorer</strong><small>YLMA SPACE · MULTI-FITS LAB</small></span>
+        </a>
+        <a href="index.html" class="ylma-btn outline">BACK TO EXPLORER</a>
+    </header>
+
+    <main class="multi-shell">
+        <section class="multi-intro">
+            <img class="multi-hero-logo" src="https://raw.githubusercontent.com/ylmaspace/assets/main/Sphere%20X%20Explorer.png" alt="SphereX Explorer">
+            <div class="multi-kicker">INDEPENDENT LABORATORY · EXPERIMENTAL MODULE</div>
+            <h1>SphereX Explorer</h1>
+            <p>Load multiple FITS observations, position them on the sky using their WCS, and compare them in sphere, blink, or split-screen mode.</p>
+            <div class="multi-beta-notice" role="note" aria-label="Multi-FITS Lab beta status">
+                <span class="multi-beta-tag">BETA</span>
+                <p><strong>MULTI-FITS LAB ESTÁ EN BETA.</strong> Estamos trabajando para corregir los problemas detectados y mejorar su estabilidad. Algunas funciones pueden fallar mientras seguimos desarrollándolo.</p>
+            </div>
+        </section>
+
+        <section class="multi-url-import" aria-labelledby="multi-url-title">
+            <div><span class="multi-directory-kicker">DIRECT IMPORT · IRSA IBE</span><h2 id="multi-url-title">ADD A FITS FROM URL</h2>
+            <p>Paste a direct link to an official FITS file. The server will download, process and add it to the sphere.</p></div>
+            <div class="multi-directory-controls">
+                <input id="multi-single-url" type="url" inputmode="url" placeholder="https://irsa.ipac.caltech.edu/ibe/data/spherex/…/archivo.fits">
+                <button id="multi-single-url-import" class="ylma-btn primary-gold" type="button">IMPORT URL</button>
+            </div>
+            <div id="multi-single-url-status" class="multi-directory-tools" role="status" aria-live="polite">Supports FITS and GZIP-compressed FITS · 120 MB maximum.</div>
+        </section>
+
+        <section class="multi-directory-import" aria-labelledby="multi-directory-title">
+            <div class="multi-directory-heading">
+                <div><span class="multi-directory-kicker">REMOTE IMPORT · IRSA IBE</span><h2 id="multi-directory-title">BULK DIRECTORY IMPORT</h2>
+                <p>Paste a SPHEREx directory. The system will find its FITS files automatically; you can import all or select specific files.</p></div>
+                <span class="multi-directory-limit">Packages of 4 FITS · 120 MB per file</span>
+            </div>
+            <label for="multi-directory-url">IRSA DIRECTORY URL</label>
+            <div class="multi-directory-controls">
+                <input id="multi-directory-url" type="url" inputmode="url" value="https://irsa.ipac.caltech.edu/ibe/data/spherex/qr2/level2/2026W29_2A/l2b-v25-2026-206/6" placeholder="https://irsa.ipac.caltech.edu/ibe/data/spherex/…/">
+                <button id="multi-directory-scan" class="ylma-btn outline" type="button">SCAN FOR FITS</button>
+                <button id="multi-directory-import" class="ylma-btn primary-gold" type="button" disabled>IMPORT SELECTED</button>
+            </div>
+            <div class="multi-directory-tools">
+                <label><input id="multi-directory-recursive" type="checkbox" checked> Incluir todos los subdirectorios</label>
+                <label><input id="multi-directory-select-all" type="checkbox" checked disabled> Select all</label>
+                <span id="multi-directory-summary" role="status" aria-live="polite">Waiting for an IRSA directory…</span>
+            </div>
+            <div id="multi-directory-files" class="multi-directory-files"><div class="multi-empty">Discovered FITS files will appear here.</div></div>
+        </section>
+
+        <section class="multi-stack-import" aria-labelledby="multi-stack-title">
+            <div><span class="multi-directory-kicker">ALADIN LITE · DIRECT STACK</span>
+                <h2 id="multi-stack-title">LOAD ENTIRE DIRECTORY INTO ALADIN</h2>
+                <p>Send each FITS file as an individual layer to Aladin Lite without first creating processed copies on the server.</p>
+            </div>
+            <div class="multi-directory-controls">
+                <input id="multi-stack-url" type="url" inputmode="url" value="https://irsa.ipac.caltech.edu/ibe/data/spherex/qr2/level2/2026W29_2A/l2b-v25-2026-206/6" placeholder="https://irsa.ipac.caltech.edu/ibe/data/spherex/…/detector/">
+                <button id="multi-stack-load" class="ylma-btn primary-gold" type="button">LOAD ALL INTO ALADIN</button>
+            </div>
+            <div class="multi-directory-tools">
+                <label><input id="multi-stack-recursive" type="checkbox" checked> Include subdirectories</label>
+                <span id="multi-stack-status" role="status" aria-live="polite">Direct layer loading · requires substantial browser memory.</span>
+            </div>
+            <p class="multi-stack-warning"><strong>MEMORY WARNING:</strong> Loading an entire directory may use a large amount of RAM, slow down your computer, or freeze the tab. For large directories, we recommend the batch import above.</p>
+        </section>
+
+        <section class="multi-controls">
+            <div class="multi-upload">
+                <label for="multi-fits-input">FITS FILES · MULTIPLE SELECTION</label>
+                <div class="multi-upload-row">
+                    <input id="multi-fits-input" type="file" accept=".fits,.fit,.fts,.fits.gz,.fit.gz,.fts.gz,application/fits" multiple>
+                    <button id="multi-load-btn" class="ylma-btn primary-gold" type="button">LOAD IMAGES</button>
+                </div>
+                <small>Automatic packages of 4 FITS · 120 MB per file · 240 MB per package · continues if a file fails</small>
+            </div>
+            <div class="multi-actions">
+                <button id="multi-sphere-btn" class="ylma-btn control-btn active" type="button">SPHERE</button>
+                <button id="multi-blink-btn" class="ylma-btn control-btn" type="button" disabled>MEGABLINK</button>
+                <button id="multi-split-btn" class="ylma-btn control-btn" type="button" disabled>SPLITSCREEN</button>
+                <label class="multi-interval">INTERVAL
+                    <select id="multi-blink-interval">
+                        <option value="2000">2 s · 0.5 Hz</option>
+                        <option value="1000" selected>1 s · 1 Hz</option>
+                        <option value="500">0.5 s · 2 Hz</option>
+                        <option value="333">⅓ s · 3 Hz</option>
+                    </select>
+                </label>
+                <label class="multi-projection">PROJECTION
+                    <select id="multi-projection">
+                        <option value="SIN" selected>Sphere · orthographic</option>
+                        <option value="AIT">All-sky · Aitoff</option>
+                        <option value="MOL">All-sky · Mollweide</option>
+                    </select>
+                </label>
+            </div>
+            <div id="multi-status" class="multi-status" role="status">Waiting for FITS files…</div>
+            <div class="multi-progress"><div id="multi-progress-bar"></div></div>
+        </section>
+
+        <section class="multi-workspace">
+            <div class="multi-view-heading">
+                <div><strong id="multi-view-title">CELESTIAL SPHERE</strong><small id="multi-view-subtitle">Orthographic projection · ICRS frame</small></div>
+                <div id="multi-cursor-coords" class="multi-coords">RA —° · Dec —°</div>
+            </div>
+            <div id="multi-sphere-viewer" class="multi-sphere-viewer"></div>
+            <div id="multi-split-grid" class="multi-split-grid" hidden></div>
+        </section>
+
+        <section class="multi-layers-section">
+            <div class="multi-layers-heading"><h2>LOADED FITS LAYERS</h2><span id="multi-layer-count">0 images</span></div>
+            <div id="multi-layer-list" class="multi-layer-list">
+                <div class="multi-empty">No images yet. Select multiple FITS files to get started.</div>
+            </div>
+        </section>
+        <footer class="multi-footer">YLMA SPACE · SPHEREx Explorer · ICRS sky data · Aladin Lite</footer>
+    </main>
+
+    <script src="multifits.js?v=fits-progress-20261115"></script>
+</body>
+</html>

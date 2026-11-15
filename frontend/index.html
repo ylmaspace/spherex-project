@@ -1,17 +1,18 @@
 <!DOCTYPE html>
-<html lang="es">
+<html lang="en">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, height=device-height, initial-scale=1.0, user-scalable=no">
-    <title>YLMA SPHEREx Explorer | Aladin Lite Engine</title>
+    <title>YLMA SPHEREx Explorer | Independent FITS Viewer</title>
+    <meta name="theme-color" content="#050a0d">
+    <link rel="manifest" href="manifest.webmanifest">
+    <link rel="icon" type="image/png" href="https://raw.githubusercontent.com/ylmaspace/assets/main/Sphere%20X%20Explorer.png">
+    <link rel="apple-touch-icon" href="https://raw.githubusercontent.com/ylmaspace/assets/main/Sphere%20X%20Explorer.png">
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Exo+2:wght@300;400;500;600;700&family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
     
-    <!-- Aladin Lite CSS -->
-    <link rel="stylesheet" href="https://aladin.cds.unistra.fr/AladinLite/api/v3/latest/aladin.min.css" />
-    
-    <link rel="stylesheet" href="styles.css">
+<link rel="stylesheet" href="styles.css?v=fits-progress-20261115">
 </head>
 <body>
 
@@ -20,11 +21,12 @@
         <div class="landing-bg"></div>
         <div class="landing-content">
             <div class="brand-badge">YLMA SPACE</div>
-            <h1 class="landing-title">SPHEREx & ALADIN LITE</h1>
-            <p class="landing-subtitle">Exploración temporal, vista dividida y comparación parpadeante (Blink).</p>
+            <h1 class="landing-title">SPHEREx FITS EXPLORER</h1>
+            <p class="landing-subtitle">Independent FITS visualization, analysis and image comparison.</p>
             
             <div class="landing-cta-container">
-                <button id="explore-btn" class="ylma-btn primary-gold">LANZAR EXPLORADOR</button>
+                <button id="explore-btn" class="ylma-btn primary-gold">LAUNCH EXPLORER</button>
+                <a href="multifits.html" class="ylma-btn outline landing-multifits-link">OPEN MULTI-FITS LAB</a>
             </div>
         </div>
     </div>
@@ -42,12 +44,13 @@
             <div class="header-center">
                 <div class="user-badge" id="user-session-badge">YLMA-USER</div>
                 <div class="score-display">
-                    <span id="header-status-text">BACKEND CONECTADO</span>
+                    <span id="header-status-text">BACKEND CONNECTED</span>
                 </div>
             </div>
 
             <div class="header-right">
-                <button id="nav-objects-btn" class="ylma-btn outline">OBJETOS VISIBLES</button>
+                <a href="multifits.html" class="ylma-btn outline" id="open-multifits-tool">MULTI-FITS LAB</a>
+                <button id="nav-objects-btn" class="ylma-btn outline">VISIBLE OBJECTS</button>
             </div>
         </header>
 
@@ -55,20 +58,20 @@
         <section class="search-bar-section">
             <form id="search-form" class="search-form">
                 <div class="input-group">
-                    <label for="input-ra">RA (Asc. Recta)</label>
+                    <label for="input-ra">RA (Right Ascension)</label>
                     <input type="number" step="0.0001" id="input-ra" value="150.1" required>
                 </div>
                 <div class="input-group">
-                    <label for="input-dec">Dec (Declinación)</label>
+                    <label for="input-dec">Dec (Declination)</label>
                     <input type="number" step="0.0001" id="input-dec" value="2.2" required>
                 </div>
                 <div class="input-group">
                     <label for="input-radius">FOV / Zoom (°)</label>
                     <input type="number" step="0.01" id="input-radius" value="10" required>
                 </div>
-                <button type="submit" id="search-btn" class="ylma-btn primary-gold">CONSULTAR IBE</button>
+                <button type="submit" id="search-btn" class="ylma-btn primary-gold">QUERY IBE</button>
             </form>
-            <div class="demo-badge-indicator" id="demo-indicator">SPLIT & BLINK ACTIVE</div>
+            <div class="demo-badge-indicator" id="demo-indicator">IRSA SCIENCE ARCHIVE</div>
         </section>
 
         <!-- MAIN WORKSPACE -->
@@ -77,57 +80,87 @@
             <!-- LEFT VISOR AREA -->
             <div class="visor-container">
                 <div class="visor-toolbar">
-                    <div class="visor-mode-title" id="current-mode-label">ALADIN LITE SKY ATLAS (SPHEREx QR2 LEVEL-2)</div>
+                    <div class="visor-mode-title" id="current-mode-label">INDEPENDENT FITS VIEWER</div>
                     <div class="visor-controls-group">
-                        <button class="ylma-btn control-btn active" id="layer-real">DSS / VIZIER</button>
-                        <button class="ylma-btn control-btn" id="layer-fits">FITS IBE</button>
-                        <button class="ylma-btn control-btn" id="btn-split">VISTA DIVIDIDA</button>
-                        <button class="ylma-btn control-btn" id="btn-blink">PARPADEAR (BLINK)</button>
-                        <button class="ylma-btn control-btn" id="btn-fs">PANTALLA COMPLETA</button>
+                        <button class="ylma-btn control-btn active" id="layer-real">DSS / VizieR</button>
+                        <button class="ylma-btn control-btn" id="layer-fits">LOCAL FITS</button>
+                        <button class="ylma-btn control-btn" id="select-fits-btn" type="button">OPEN PRIMARY FITS</button>
+                        <input id="local-fits-input" type="file" accept=".fits,.fit,.fts,application/fits" multiple hidden>
+                        <input id="compare-fits-input" type="file" accept=".fits,.fit,.fts,application/fits" hidden>
+                        <button class="ylma-btn control-btn" id="btn-split" title="Compare the primary and second local FITS image">SPLIT VIEW</button>
+                        <button class="ylma-btn control-btn" id="btn-blink" title="Alternate between the two local FITS images">BLINK COMPARISON</button>
+                        <button class="ylma-btn control-btn" id="btn-fs">FULL SCREEN</button>
                     </div>
                 </div>
 
-                <!-- ALADIN LITE STAGE CONTAINER -->
+                <div class="fits-url-import" role="group" aria-label="Load FITS from URL">
+                    <label for="fits-url-input">LOAD FITS FROM IRSA URL</label>
+                    <div class="fits-url-controls">
+                        <input id="fits-url-input" type="url" inputmode="url" autocomplete="url"
+                            placeholder="https://irsa.ipac.caltech.edu/ibe/data/spherex/...fits"
+                            aria-label="Direct FITS file URL">
+                        <button id="load-fits-url-btn" class="ylma-btn primary-gold" type="button">LOAD URL</button>
+                    </div>
+                    <small>HTTPS · SPHEREx IBE file · 120 MB maximum</small>
+                </div>
+
+                <!-- Independent local FITS visualization stage -->
                 <div class="visor-stage" id="visor-stage">
                     <div class="loading-overlay" id="loading-overlay">
                         <div class="spinner"></div>
-                        <div class="loading-text">CARGANDO REPOSITORIO IBE...</div>
+                        <div class="loading-text">LOADING IBE ARCHIVE...</div>
                     </div>
 
-                    <!-- Contenedor Único -->
-                    <div id="aladin-lite-div"></div>
-
-                    <!-- Contenedor de Vista Dividida (Dual Visor con Deslizadores Independientes) -->
-                    <div id="split-view-container">
-                        <div class="split-pane">
-                            <div id="aladin-left-div" class="split-map"></div>
-                            <div class="split-hud-bar">
-                                <span id="split-left-title">ÉPOCA A: 00:00:00</span>
-                                <input type="range" id="split-range-left" min="0" max="59" value="0" step="1">
-                            </div>
-                        </div>
-                        <div class="split-pane">
-                            <div id="aladin-right-div" class="split-map"></div>
-                            <div class="split-hud-bar">
-                                <span id="split-right-title">ÉPOCA B: 00:30:00</span>
-                                <input type="range" id="split-range-right" min="0" max="59" value="30" step="1">
-                            </div>
+                    <div id="fits-dropzone" class="fits-dropzone" role="button" tabindex="0" aria-label="Drop a FITS file here or click to browse">
+                        <div class="fits-drop-icon">FITS</div>
+                        <strong>ADD IMAGE TO SKY MAP</strong>
+                        <span>Drop one FITS file to visualize it, or load a second file with Compare</span>
+                        <small>FITS / FIT · up to 120 MB · WCS parsing and automatic HDU selection</small>
+                        <button class="ylma-btn primary-gold fits-drop-button" id="fits-drop-button" type="button">SELECT FITS FILE</button>
+                    </div>
+                    <div class="fits-progress-overlay" id="fits-progress-overlay" aria-live="polite" aria-hidden="true">
+                        <div class="fits-progress-card">
+                            <div class="fits-progress-orbit"></div>
+                            <h3 id="fits-progress-title">PROCESSING OBSERVATION</h3>
+                            <p id="fits-progress-message">Preparing FITS file…</p>
+                            <div class="fits-progress-track"><div id="fits-progress-bar"></div></div>
+                            <strong id="fits-progress-percent">0%</strong>
                         </div>
                     </div>
+                    <!-- Single container -->
+                    
+                    <section id="fits-local-viewer" class="fits-local-viewer" aria-label="Visor FITS independiente" hidden>
+                        <div class="fits-local-toolbar">
+                            <strong id="fits-local-title">FITS IMAGE</strong>
+                            <span id="fits-local-coords">RA — · Dec —</span>
+                            <span id="fits-local-pixel-coords">PIXEL X — · Y —</span>
+                            <button type="button" id="fits-local-reset">FIT TO VIEW</button>
+                        </div>
+                        <div id="fits-local-viewport" class="fits-local-viewport">
+                            <img id="fits-local-image" alt="Scientific preview of the selected FITS image" draggable="false">
+                        </div>
+                        <div class="fits-local-footer">LOCAL VIEWER · NO ALADIN / CDS DEPENDENCY · WHEEL: ZOOM · DRAG: PAN</div>
+                    </section>
 
+                    <section id="split-local-container" class="split-local-container" style="display:none">
+                        <button type="button" id="split-compare-upload" class="ylma-btn primary-gold split-compare-upload">CHANGE SECOND FITS IMAGE</button>
+                        <div class="split-local-pane"><img id="split-local-left" alt="First FITS image"><span id="split-local-left-title">FITS A</span></div>
+                        <div class="split-local-pane"><img id="split-local-right" alt="Second FITS image"><span id="split-local-right-title">FITS B</span></div>
+                    </section>
                     <div class="visor-hud-coords">
-                        <span id="hud-coords">RA: 150.1000 | Dec: +02.2000</span>
+                        <span id="hud-coords">CENTER · RA: 150.1000 | Dec: +02.2000</span>
+                        <span id="hud-cursor-coords">CURSOR · RA —° | Dec —°</span>
                         <span id="hud-survey">SURVEY: DSS2/color</span>
                     </div>
 
                     <!-- CONTROL DESLIZANTE INFERIOR (Modo Normal) -->
                     <div class="hud-timeline-bottom" id="normal-timeline">
                         <div class="timeline-top-row">
-                            <span class="timeline-main-title" id="timeline-epoch-title">MINUTO ACTIVO: 01 SEP 2026 - 00:00:00</span>
-                            <div class="timeline-clock-display" id="hud-time-display">00:00:00</div>
+                            <span class="timeline-main-title" id="timeline-epoch-title">SELECTED OBSERVATION</span>
+                            <div class="timeline-clock-display" id="hud-time-display">—</div>
                         </div>
                         <div class="curved-slider-container">
-                            <input type="range" id="epoch-range" min="0" max="59" value="0" step="1">
+                            <label class="sr-only" for="epoch-index">Observation number</label><input type="text" inputmode="numeric" pattern="[0-9]*" id="epoch-index" class="epoch-index-input" value="1" aria-label="Selected observation number">
                         </div>
                     </div>
                 </div>
@@ -136,11 +169,11 @@
             <!-- RIGHT PANEL: OBJECT INFO -->
             <div class="sidebar-panel">
                 <div class="panel-section">
-                    <h3 class="panel-title">DATOS DE OBSERVACIÓN</h3>
+                    <h3 class="panel-title">OBSERVATION DATA</h3>
                     <div class="info-grid" id="object-info-grid">
                         <div class="info-row">
                             <span class="info-key">Estado API</span>
-                            <span class="info-val ylma-status" id="info-status">Conectado (/api)</span>
+                            <span class="info-val ylma-status" id="info-status">Waiting for IRSA query</span>
                         </div>
                         <div class="info-row">
                             <span class="info-key">Coordenadas Centro</span>
@@ -148,37 +181,56 @@
                         </div>
                         <div class="info-row">
                             <span class="info-key">Archivo FITS Activo</span>
-                            <span class="info-val" id="info-epoch-label">level2_20260901_0000_spx.fits</span>
+                            <span class="info-val" id="info-epoch-label">No product selected</span>
                         </div>
                         <div class="info-row">
-                            <span class="info-key">Fuentes en Minuto</span>
-                            <span class="info-val" id="info-count">0 fuentes</span>
+                            <span class="info-key">Observaciones IRSA</span>
+                            <span class="info-val" id="info-count">0 sources</span>
                         </div>
                     </div>
                 </div>
 
+                <div class="panel-section catalog-panel">
+                    <h3 class="panel-title">SPHEREx ARCHIVE · IRSA</h3>
+                    <p class="doc-text">Browse official directories and download FITS files. You can paste an IRSA directory URL or a relative path. QR2 is available for download; DR1 and QR3 are used for newer observations.</p>
+                    <label class="catalog-label" for="catalog-path">Directory URL or path</label>
+                    <input id="catalog-path" class="catalog-input" type="text" value="https://irsa.ipac.caltech.edu/ibe/data/spherex/" placeholder="https://irsa.ipac.caltech.edu/ibe/data/spherex/">
+                    <div class="catalog-actions">
+                        <button id="catalog-up-btn" class="ylma-btn outline catalog-up-btn" type="button">← UP ONE LEVEL</button>
+                        <button id="catalog-search-btn" class="ylma-btn primary-gold catalog-search-btn" type="button">EXPLORAR</button>
+                    </div>
+                    <div id="catalog-status" class="doc-text" role="status" aria-live="polite">IRSA archive ready to browse.</div>
+                    <div id="catalog-results" class="catalog-results"></div>
+                </div>
+
+                <div class="panel-section saved-sky-panel">
+                    <h3 class="panel-title">MY SKY MAP</h3>
+                    <p class="doc-text">Your saved FITS files and their WCS positions. Stored locally in this browser.</p>
+                    <div class="saved-sky-summary" id="saved-sky-summary">0 images added</div>
+                    <div id="saved-sky-list" class="saved-sky-list"><p class="doc-text">You have not saved any images yet.</p></div>
+                </div>
                 <div class="panel-section">
-                    <h3 class="panel-title">ARQUITECTURA DEL SISTEMA</h3>
+                    <h3 class="panel-title">SYSTEM ARCHITECTURE</h3>
                     <p class="doc-text">
-                        Sincronización avanzada con Vista Dividida Dual e interpolación parpadeante Blink para análisis diferencial.
+                        Advanced synchronization with dual split view and blinking interpolation for differential analysis.
                     </p>
-                    <a href="http://127.0.0.1:8000/docs" target="_blank" class="ylma-link">Abrir documentación FastAPI &rarr;</a>
+                    <a href="/docs" target="_blank" class="ylma-link">Open FastAPI documentation &rarr;</a>
                 </div>
             </div>
 
         </div>
     </div>
 
-    <!-- MODAL DE OBJETOS VISIBLES -->
+    <!-- MODAL DE VISIBLE OBJECTS -->
     <div id="objects-modal" class="modal-overlay">
         <div class="modal-box">
             <div class="modal-header">
-                <h3>OBJETOS Y FUENTES EN LA UBICACIÓN Y MINUTO</h3>
+                <h3>OBJECTS AND SOURCES AT THIS LOCATION AND TIME</h3>
                 <button class="modal-close" id="objects-close-btn">&times;</button>
             </div>
             <div class="modal-body" id="objects-modal-body">
                 <p style="color: #BDBDBD; font-size: 0.85rem; margin-bottom: 16px;">
-                    Resultados filtrados por coordenadas y minuto de observación exacto:
+                    Results filtered by coordinates and exact observation time:
                 </p>
                 <div id="objects-list-container" style="display: flex; flex-direction: column; gap: 10px;">
                     <!-- Rellenado por JavaScript -->
@@ -196,28 +248,40 @@
             </div>
             <div class="modal-body" style="display: flex; flex-direction: column; gap: 16px; align-items: center;">
                 <p style="color: #BDBDBD; font-size: 0.85rem; text-align: center;">
-                    Comparando la misma posición estelar alternando entre dos épocas temporales automáticamente.
+                    Comparing the same sky position by automatically alternating between two time epochs.
                 </p>
+                <div class="compare-upload-row">
+                    <button type="button" class="ylma-btn primary-gold" id="blink-compare-upload">SUBIR SEGUNDA FITS IMAGE</button>
+                    <span>Choose a second FITS file from your computer. No Aladin or IRSA connection is needed.</span>
+                </div>
                 <div id="blink-preview-box" style="width: 100%; height: 320px; background: #000; border: 1px solid var(--ylma-gold); position: relative; display: flex; justify-content: center; align-items: center;">
-                    <div id="blink-status-label" style="position: absolute; top: 10px; left: 10px; background: rgba(0,0,0,0.8); padding: 4px 8px; color: var(--ylma-gold); font-size: 0.75rem; font-weight: 700;">ÉPOCA A</div>
+                    <img id="blink-local-image" alt="FITS image alternating during comparison" style="display:none;max-width:100%;max-height:100%;object-fit:contain;">
+                    <div id="blink-status-label" style="position: absolute; top: 10px; left: 10px; background: rgba(0,0,0,0.8); padding: 4px 8px; color: var(--ylma-gold); font-size: 0.75rem; font-weight: 700;">EPOCH A</div>
                 </div>
                 <div style="display: flex; gap: 16px; width: 100%; justify-content: space-between;">
                     <div>
-                        <label style="font-size: 0.75rem; color: var(--text-muted);">Época 1:</label>
+                        <label style="font-size: 0.75rem; color: var(--text-muted);">Epoch 1:</label>
                         <select id="blink-epoch-1" style="background: #111; color: #fff; border: 1px solid var(--border-subtle); padding: 6px;"></select>
                     </div>
                     <div>
-                        <label style="font-size: 0.75rem; color: var(--text-muted);">Época 2:</label>
+                        <label style="font-size: 0.75rem; color: var(--text-muted);">Epoch 2:</label>
                         <select id="blink-epoch-2" style="background: #111; color: #fff; border: 1px solid var(--border-subtle); padding: 6px;"></select>
                     </div>
-                    <button id="blink-start-toggle" class="ylma-btn primary-gold" style="padding: 6px 16px;">INICIAR BLINK</button>
+                    <div class="blink-rate-control">
+                        <label for="blink-interval">INTERVAL</label>
+                        <select id="blink-interval" aria-label="Blink interval">
+                            <option value="2000">2 seconds · 0.5 Hz</option>
+                            <option value="1000" selected>1 second · 1 Hz</option>
+                            <option value="500">0.5 seconds · 2 Hz</option>
+                            <option value="333">⅓ second · 3 Hz</option>
+                        </select>
+                    </div>
+                    <button id="blink-start-toggle" class="ylma-btn primary-gold" style="padding: 6px 16px;">START BLINK</button>
                 </div>
             </div>
         </div>
     </div>
 
-    <!-- Aladin Lite JS API -->
-    <script type="text/javascript" src="https://aladin.cds.unistra.fr/AladinLite/api/v3/latest/aladin.js" charset="utf-8"></script>
-    <script src="script.js"></script>
+    <script src="script.js?v=fits-progress-20261115"></script>
 </body>
 </html>

@@ -1,4 +1,4 @@
-"""FITS upload inspection, WCS extraction and Aladin-compatible image preparation."""
+"""FITS inspection, WCS extraction and independent raster-preview generation."""
 from __future__ import annotations
 
 import os
@@ -13,6 +13,7 @@ from astropy.wcs import WCS
 
 UPLOAD_DIR = Path(os.getenv("SPHEREX_UPLOAD_DIR", "/tmp/ylma-spherex-fits"))
 MAX_UPLOAD_BYTES = 120 * 1024 * 1024
+PREVIEW_SAMPLE_PIXELS = 2_000_000
 UPLOAD_DIR.mkdir(parents=True, exist_ok=True)
 
 
@@ -32,29 +33,41 @@ def process_fits_upload(filename: str, content: bytes) -> dict[str, Any]:
     original_path = UPLOAD_DIR / f"{upload_id}.fits"
     display_path = UPLOAD_DIR / f"{upload_id}-display.fits"
     preview_path = UPLOAD_DIR / f"{upload_id}-preview.png"
+
     try:
         original_path.write_bytes(content)
         with fits.open(original_path, memmap=False, lazy_load_hdus=True) as hdus:
-            candidates = []
+            # Inspect HDU shapes first. Do not load every image array into RAM just
+            # to decide which 2-D plane is the most useful one.
+            candidates: list[tuple[int, int]] = []
             for index, hdu in enumerate(hdus):
-                data = hdu.data
-                if data is None:
+                shape = getattr(hdu, "shape", None)
+                if not shape or len(shape) < 2:
                     continue
-                array = np.asarray(data)
-                if array.ndim < 2 or array.size == 0:
-                    continue
-                # For cubes, take the central plane of every leading axis.
-                while array.ndim > 2:
-                    array = array[tuple(size // 2 for size in array.shape[:-2])]
-                if array.ndim == 2 and array.shape[0] > 1 and array.shape[1] > 1:
-                    candidates.append((array.shape[0] * array.shape[1], index, hdu, array))
+                height, width = int(shape[-2]), int(shape[-1])
+                if height > 1 and width > 1:
+                    candidates.append((height * width, index))
+
             if not candidates:
                 raise FITSProcessingError("No se encontró ninguna extensión con una imagen 2D.")
-            _, hdu_index, selected_hdu, image = max(candidates, key=lambda item: item[0])
+
+            _, hdu_index = max(candidates, key=lambda item: item[0])
+            selected_hdu = hdus[hdu_index]
+            if selected_hdu.data is None:
+                raise FITSProcessingError("La extensión de imagen seleccionada no contiene datos.")
+
+            image = np.asarray(selected_hdu.data)
+            # For cubes, take the central plane of every leading axis.
+            while image.ndim > 2:
+                image = image[tuple(size // 2 for size in image.shape[:-2])]
+            if image.ndim != 2 or image.shape[0] < 2 or image.shape[1] < 2:
+                raise FITSProcessingError("La extensión seleccionada no contiene una imagen 2D válida.")
+
             header = selected_hdu.header.copy()
             if not WCS(header).has_celestial:
                 header = hdus[0].header.copy()
             wcs = WCS(header).celestial
+
             height, width = image.shape
             center_x, center_y = (width - 1) / 2, (height - 1) / 2
             ra = dec = None
@@ -63,46 +76,55 @@ def process_fits_upload(filename: str, content: bytes) -> dict[str, Any]:
                 ra, dec = float(ra_value) % 360.0, float(dec_value)
                 if not np.isfinite(ra) or not np.isfinite(dec) or not -90 <= dec <= 90:
                     ra = dec = None
-            # Produce a compact single-image FITS so Aladin displays the selected HDU,
-            # even when the original product is a multi-extension FITS (MEF).
-            fits.PrimaryHDU(data=np.asarray(image, dtype=np.float32), header=header).writeto(
+
+            display_data = np.asarray(image, dtype=np.float32)
+            fits.PrimaryHDU(data=display_data, header=header).writeto(
                 display_path, overwrite=True, output_verify="silentfix"
             )
-            # Independent PNG preview: does not call Aladin, CDS, IRSA or any remote API.
-            preview_data = np.asarray(image, dtype=np.float32)
-            valid = preview_data[np.isfinite(preview_data)]
-            if valid.size == 0:
-                raise FITSProcessingError("La extensión seleccionada no contiene píxeles válidos.")
-            p_low, p_high = np.percentile(valid, [1.0, 99.5])
+
+            # Estimate the display stretch from a bounded sample. The raster is
+            # still generated at full resolution, but percentile calculation no
+            # longer sorts a second full-size copy of a large science image.
+            flat = display_data.reshape(-1)
+            sample_step = max(1, int(np.ceil(flat.size / PREVIEW_SAMPLE_PIXELS)))
+            sample = flat[::sample_step]
+            finite_sample = sample[np.isfinite(sample)]
+            if finite_sample.size == 0:
+                finite_mask = np.isfinite(display_data)
+                if not np.any(finite_mask):
+                    raise FITSProcessingError("La extensión seleccionada no contiene píxeles válidos.")
+                finite_sample = display_data[finite_mask]
+
+            p_low, p_high = np.percentile(finite_sample, [1.0, 99.5])
             if not np.isfinite(p_low) or not np.isfinite(p_high) or p_high <= p_low:
-                p_low, p_high = float(valid.min()), float(valid.max())
+                p_low, p_high = float(finite_sample.min()), float(finite_sample.max())
             if p_high <= p_low:
                 p_high = p_low + 1.0
-            normalized = np.nan_to_num((preview_data - p_low) / (p_high - p_low), nan=0.0, posinf=1.0, neginf=0.0)
-            pixels = np.clip(normalized * 255.0, 0, 255).astype(np.uint8)
-            Image.fromarray(pixels, mode="L").save(preview_path, format="PNG", optimize=True)
-            finite = np.asarray(image, dtype=np.float32)
-            finite = finite[np.isfinite(finite)]
-            if finite.size == 0:
-                raise FITSProcessingError("La extensión seleccionada solo contiene valores no finitos.")
-            low, high = np.percentile(finite, [1.0, 99.5])
-            if not np.isfinite(low) or not np.isfinite(high) or high <= low:
-                low, high = float(finite.min()), float(finite.max())
-            if high <= low:
-                high = low + 1.0
+
+            normalized = (display_data - np.float32(p_low)) / np.float32(p_high - p_low)
+            np.nan_to_num(normalized, copy=False, nan=0.0, posinf=1.0, neginf=0.0)
+            np.clip(normalized, 0.0, 1.0, out=normalized)
+            normalized *= np.float32(255.0)
+            pixels = normalized.astype(np.uint8)
+            Image.fromarray(pixels).save(
+                preview_path, format="PNG", optimize=False, compress_level=1
+            )
+
             try:
                 from astropy.wcs.utils import proj_plane_pixel_scales
                 scales = np.abs(proj_plane_pixel_scales(wcs)) * 3600.0 if wcs.has_celestial else []
                 pixel_scale_arcsec = float(np.mean(scales)) if len(scales) else None
             except Exception:
                 pixel_scale_arcsec = None
+
+            hdu_count = len(hdus)
             original_path.unlink(missing_ok=True)
             return {
                 "id": upload_id,
                 "filename": Path(filename).name[:180],
                 "size_bytes": len(content),
                 "hdu_index": hdu_index,
-                "hdu_count": len(hdus),
+                "hdu_count": hdu_count,
                 "width": int(width),
                 "height": int(height),
                 "ra": ra,

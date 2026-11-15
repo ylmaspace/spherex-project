@@ -96,12 +96,12 @@
                     </div>
                 </div>
 
-                <div class="fits-url-import" role="group" aria-label="Cargar FITS desde URL">
+                <div class="fits-url-import" role="group" aria-label="Load FITS from URL">
                     <label for="fits-url-input">LOAD FITS FROM IRSA URL</label>
                     <div class="fits-url-controls">
                         <input id="fits-url-input" type="url" inputmode="url" autocomplete="url"
                             placeholder="https://irsa.ipac.caltech.edu/ibe/data/spherex/...fits"
-                            aria-label="URL directa del archivo FITS">
+                            aria-label="Direct FITS file URL">
                         <button id="load-fits-url-btn" class="ylma-btn primary-gold" type="button">LOAD URL</button>
                     </div>
                     <small>HTTPS · SPHEREx IBE file · 120 MB maximum</small>
@@ -147,8 +147,8 @@
 
                     <section id="split-local-container" class="split-local-container" style="display:none">
                         <button type="button" id="split-compare-upload" class="ylma-btn primary-gold split-compare-upload">CHANGE SECOND FITS IMAGE</button>
-                        <div class="split-local-pane"><img id="split-local-left" alt="Primera imagen FITS"><span id="split-local-left-title">FITS A</span></div>
-                        <div class="split-local-pane"><img id="split-local-right" alt="Segunda imagen FITS"><span id="split-local-right-title">FITS B</span></div>
+                        <div class="split-local-pane"><img id="split-local-left" alt="First FITS image"><span id="split-local-left-title">FITS A</span></div>
+                        <div class="split-local-pane"><img id="split-local-right" alt="Second FITS image"><span id="split-local-right-title">FITS B</span></div>
                     </section>
                     <!-- Contenedor de Vista Dividida (Dual Visor con Deslizadores Independientes) -->
                     <div id="split-view-container">
@@ -290,14 +290,14 @@
                     </div>
                     <div class="blink-rate-control">
                         <label for="blink-interval">INTERVAL</label>
-                        <select id="blink-interval" aria-label="Intervalo de parpadeo">
+                        <select id="blink-interval" aria-label="Blink interval">
                             <option value="2000">2 seconds · 0.5 Hz</option>
                             <option value="1000" selected>1 second · 1 Hz</option>
                             <option value="500">0.5 seconds · 2 Hz</option>
                             <option value="333">⅓ second · 3 Hz</option>
                         </select>
                     </div>
-                    <button id="blink-start-toggle" class="ylma-btn primary-gold" style="padding: 6px 16px;">INICIAR BLINK</button>
+                    <button id="blink-start-toggle" class="ylma-btn primary-gold" style="padding: 6px 16px;">START BLINK</button>
                 </div>
             </div>
         </div>

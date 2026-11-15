@@ -177,11 +177,11 @@
                     <!-- CONTROL DESLIZANTE INFERIOR (Modo Normal) -->
                     <div class="hud-timeline-bottom" id="normal-timeline">
                         <div class="timeline-top-row">
-                            <span class="timeline-main-title" id="timeline-epoch-title">OBSERVACIÓN SELECCIONADA</span>
+                            <span class="timeline-main-title" id="timeline-epoch-title">SELECTED OBSERVATION</span>
                             <div class="timeline-clock-display" id="hud-time-display">—</div>
                         </div>
                         <div class="curved-slider-container">
-                            <label class="sr-only" for="epoch-index">Número de observación</label><input type="text" inputmode="numeric" pattern="[0-9]*" id="epoch-index" class="epoch-index-input" value="1" aria-label="Selected observation number">
+                            <label class="sr-only" for="epoch-index">Observation number</label><input type="text" inputmode="numeric" pattern="[0-9]*" id="epoch-index" class="epoch-index-input" value="1" aria-label="Selected observation number">
                         </div>
                     </div>
                 </div>
@@ -202,7 +202,7 @@
                         </div>
                         <div class="info-row">
                             <span class="info-key">Archivo FITS Activo</span>
-                            <span class="info-val" id="info-epoch-label">Ningún producto seleccionado</span>
+                            <span class="info-val" id="info-epoch-label">No product selected</span>
                         </div>
                         <div class="info-row">
                             <span class="info-key">Observaciones IRSA</span>
@@ -235,7 +235,7 @@
                     <p class="doc-text">
                         Advanced synchronization with dual split view and blinking interpolation for differential analysis.
                     </p>
-                    <a href="/docs" target="_blank" class="ylma-link">Abrir documentación FastAPI &rarr;</a>
+                    <a href="/docs" target="_blank" class="ylma-link">Open FastAPI documentation &rarr;</a>
                 </div>
             </div>
 
@@ -276,7 +276,7 @@
                     <span>Compare your primary FITS image with another local image.</span>
                 </div>
                 <div id="blink-preview-box" style="width: 100%; height: 320px; background: #000; border: 1px solid var(--ylma-gold); position: relative; display: flex; justify-content: center; align-items: center;">
-                    <img id="blink-local-image" alt="Imagen FITS alternada durante la comparación" style="display:none;max-width:100%;max-height:100%;object-fit:contain;">
+                    <img id="blink-local-image" alt="FITS image alternating during comparison" style="display:none;max-width:100%;max-height:100%;object-fit:contain;">
                     <div id="blink-status-label" style="position: absolute; top: 10px; left: 10px; background: rgba(0,0,0,0.8); padding: 4px 8px; color: var(--ylma-gold); font-size: 0.75rem; font-weight: 700;">EPOCH A</div>
                 </div>
                 <div style="display: flex; gap: 16px; width: 100%; justify-content: space-between;">

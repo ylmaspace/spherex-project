@@ -209,7 +209,7 @@ function setLayerVisibility(layer, visible) {
     layer.visible = visible;
 }
 function renderLayerList() {
-    $('multi-layer-count').textContent = state.layers.length + (state.layers.length === 1 ? ' imagen' : ' imágenes');
+    $('multi-layer-count').textContent = state.layers.length + (state.layers.length === 1 ? ' image' : ' images');
     const list = $('multi-layer-list');
     list.replaceChildren();
     if (!state.layers.length) {

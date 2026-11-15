@@ -38,7 +38,7 @@ const API = '';
 document.addEventListener('DOMContentLoaded', () => {
     initUser();
     setupEventListeners();
-    setObservationStatus('Listo para consultar IRSA.');
+    setObservationStatus('Ready to query IRSA.');
     loadSavedSkyMap();
     initLocalFitsControls();
 });
@@ -287,7 +287,7 @@ function renderSavedSkyMap() {
     if (!savedSkyRecords.length) {
         const empty = document.createElement('p');
         empty.className = 'doc-text';
-        empty.textContent = 'Todavía no has guardado imágenes.';
+        empty.textContent = 'You have not saved any images yet.';
         list.appendChild(empty);
         return;
     }
@@ -304,7 +304,7 @@ function renderSavedSkyMap() {
         open.append(title, coords);
         open.addEventListener('click', () => {
             if (record.file) loadLocalFits(record.file, record.id);
-            else setObservationStatus('El archivo original no está disponible en este navegador.', '');
+            else setObservationStatus('The original file is not available in this browser.', '');
         });
         const remove = document.createElement('button');
         remove.type = 'button';
@@ -334,7 +334,7 @@ async function loadSavedSkyMap() {
 function rebuildSkyMarkers() {
     if (!aladin || !window.A?.catalog || !window.A?.marker) return;
     if (!skyMarkerLayer) {
-        skyMarkerLayer = A.catalog({ name: 'YLMA · Mis imágenes FITS', shape: 'cross', color: '#ffb700', sourceSize: 13 });
+        skyMarkerLayer = A.catalog({ name: 'YLMA · My FITS images', shape: 'cross', color: '#ffb700', sourceSize: 13 });
         aladin.addCatalog(skyMarkerLayer);
     }
     skyMarkerSources.forEach((source) => {
@@ -368,11 +368,11 @@ async function uploadFitsToBackend(file, onProgress) {
                 try { payload = JSON.parse(xhr.responseText || '{}'); } catch (_) { payload = {}; }
             }
             if (xhr.status >= 200 && xhr.status < 300) resolve(payload);
-            else reject(new Error(payload.detail || payload.message || `El servidor respondió HTTP ${xhr.status}.`));
+            else reject(new Error(payload.detail || payload.message || `The server responded with HTTP ${xhr.status}.`));
         };
-        xhr.onerror = () => reject(new Error('La conexión se interrumpió durante la subida. Comprueba la conexión y vuelve a intentarlo.'));
-        xhr.ontimeout = () => reject(new Error('El servidor tardó más de 8 minutos en procesar el FITS. La carga se ha cancelado; prueba con un archivo más pequeño.'));
-        xhr.onabort = () => reject(new Error('La carga del FITS se canceló.'));
+        xhr.onerror = () => reject(new Error('The connection was interrupted during upload. Check your connection and try again.'));
+        xhr.ontimeout = () => reject(new Error('The server took more than 8 minutes to process the FITS file. The upload was cancelled; try a smaller file.'));
+        xhr.onabort = () => reject(new Error('The FITS upload was cancelled.'));
         const form = new FormData();
         form.append('file', file, file.name || 'observation.fits');
         onProgress(2);
@@ -392,7 +392,7 @@ async function loadFitsFromUrl() {
     try {
         source = new URL(rawUrl);
     } catch (_) {
-        setObservationStatus('La URL no tiene un formato válido.', 'URL no válida');
+        setObservationStatus('The URL format is invalid.', 'Invalid URL');
         return;
     }
     if (source.protocol !== 'https:' || source.hostname !== 'irsa.ipac.caltech.edu' ||
@@ -410,12 +410,12 @@ async function loadFitsFromUrl() {
         const proxyUrl = '/api/product?' + new URLSearchParams({ url: source.href }).toString();
         const response = await fetch(proxyUrl, { cache: 'no-store', signal: controller.signal });
         if (!response.ok) {
-            let detail = 'IRSA respondió HTTP ' + response.status + '.';
+            let detail = 'IRSA returned HTTP ' + response.status + '.';
             try { const payload = await response.json(); if (payload.detail) detail = payload.detail; } catch (_) {}
             throw new Error(detail);
         }
         const declaredSize = Number(response.headers.get('content-length') || 0);
-        if (declaredSize > 120 * 1024 * 1024) throw new Error('El FITS supera el límite de 120 MB.');
+        if (declaredSize > 120 * 1024 * 1024) throw new Error('The FITS file exceeds the 120 MB limit.');
         showFitsProgress('DESCARGANDO FITS DESDE IRSA', filename, 45);
         const reader = response.body?.getReader();
         if (!reader) throw new Error('El navegador no permite leer la descarga de IRSA.');
@@ -428,7 +428,7 @@ async function loadFitsFromUrl() {
                 received += part.value.byteLength;
                 if (received > 120 * 1024 * 1024) {
                     await reader.cancel();
-                    throw new Error('El FITS supera el límite de 120 MB.');
+                    throw new Error('The FITS file exceeds the 120 MB limit.');
                 }
                 chunks.push(part.value);
                 const percent = declaredSize > 0
@@ -439,9 +439,9 @@ async function loadFitsFromUrl() {
         } finally {
             reader.releaseLock();
         }
-        if (!received) throw new Error('IRSA devolvió un archivo vacío.');
+        if (!received) throw new Error('IRSA returned an empty file.');
         const blob = new Blob(chunks, { type: response.headers.get('content-type') || 'application/fits' });
-        if (blob.type.includes('text/html')) throw new Error('IRSA devolvió una página web en lugar de un FITS.');
+        if (blob.type.includes('text/html')) throw new Error('IRSA returned a web page instead of a FITS file.');
         showFitsProgress('PROCESANDO FITS REMOTO', filename + ' · ' + (blob.size / 1048576).toFixed(1) + ' MB', 78);
         const file = new File([blob], filename, { type: 'application/fits', lastModified: Date.now() });
         const loaded = await loadLocalFits(file);
@@ -452,7 +452,7 @@ async function loadFitsFromUrl() {
     } catch (error) {
         hideFitsProgress();
         console.error('Remote FITS import failed', error);
-        const message = error.name === 'AbortError' ? 'La descarga desde IRSA superó los 8 minutos y se canceló.' : error.message;
+        const message = error.name === 'AbortError' ? 'The IRSA download exceeded 8 minutes and was cancelled.' : error.message;
         setObservationStatus('No se pudo incorporar el FITS desde la URL: ' + message, 'Error de carga remota');
     } finally {
         clearTimeout(timeout);
@@ -461,11 +461,11 @@ async function loadFitsFromUrl() {
 
 async function loadComparisonFits(file) {
     if (!activeLocalFitsUrl) {
-        setObservationStatus('Primero incorpora la imagen FITS principal; después podrás cargar la segunda para compararlas.', '');
+        setObservationStatus('Load the primary FITS image first; then you can add a second image for comparison.', '');
         return;
     }
     if (!/\.(fits?|fts)$/i.test(file.name || '') || !file.size || file.size > 120 * 1024 * 1024) {
-        setObservationStatus('Selecciona un FITS válido de hasta 120 MB.', 'Archivo no válido');
+        setObservationStatus('Select a valid FITS file up to 120 MB.', 'Invalid file');
         return;
     }
     try {
@@ -473,12 +473,12 @@ async function loadComparisonFits(file) {
         const result = await uploadFitsToBackend(file, (percent) => {
             showFitsProgress('SUBIENDO SEGUNDA IMAGEN', file.name, percent);
         });
-        if (!result?.id || !result.preview_url) throw new Error('El servidor no devolvió una vista previa válida.');
-        showFitsProgress('PREPARANDO COMPARACIÓN', 'Descargando la segunda imagen…', 90);
+        if (!result?.id || !result.preview_url) throw new Error('The server did not return a valid preview.');
+        showFitsProgress('PREPARING COMPARISON', 'Descargando la segunda imagen…', 90);
         const response = await fetch(result.preview_url, { cache: 'no-store' });
-        if (!response.ok) throw new Error('La vista previa respondió HTTP ' + response.status + '.');
+        if (!response.ok) throw new Error('The preview returned HTTP ' + response.status + '.');
         const blob = await response.blob();
-        if (!blob.size || !blob.type.startsWith('image/')) throw new Error('El servidor no devolvió una vista previa de imagen válida.');
+        if (!blob.size || !blob.type.startsWith('image/')) throw new Error('The server did not return a valid image preview.');
         const nextUrl = URL.createObjectURL(blob);
         const probe = new Image();
         try {
@@ -488,7 +488,7 @@ async function loadComparisonFits(file) {
                 probe.src = nextUrl;
             });
             if (!probe.naturalWidth || !probe.naturalHeight) {
-                throw new Error('La segunda FITS generó una imagen sin dimensiones válidas.');
+                throw new Error('The second FITS image has invalid dimensions.');
             }
         } catch (previewError) {
             URL.revokeObjectURL(nextUrl);
@@ -499,12 +499,12 @@ async function loadComparisonFits(file) {
         comparisonLocalFitsName = file.name;
         blinkLocalShowingSecond = false;
         const controls = byId('compare-fits-btn');
-        if (controls) controls.textContent = 'CAMBIAR FITS DE COMPARACIÓN';
+        if (controls) controls.textContent = 'CHANGE COMPARISON FITS';
         const blinkLabel = byId('blink-status-label');
         if (blinkLabel) blinkLabel.textContent = 'Imagen A: ' + (byId('fits-local-title')?.textContent || 'FITS principal');
         renderLocalSplitComparison();
         setObservationStatus('Segunda imagen lista para comparar: ' + file.name, result.width + '×' + result.height);
-        showFitsProgress('COMPARACIÓN PREPARADA', 'Ya puedes usar Parpadear o Vista dividida.', 100);
+        showFitsProgress('COMPARISON READY', 'Ya puedes usar Parpadear o Vista dividida.', 100);
         setTimeout(hideFitsProgress, 700);
         if (pendingLocalCompareMode === 'split') {
             pendingLocalCompareMode = null;
@@ -513,7 +513,7 @@ async function loadComparisonFits(file) {
     } catch (error) {
         hideFitsProgress();
         console.error('FITS comparison upload failed', error);
-        setObservationStatus('No se pudo cargar la segunda imagen: ' + error.message, 'Error de comparación');
+        setObservationStatus('No se pudo cargar la segunda imagen: ' + error.message, 'Comparison error');
     }
 }
 
@@ -549,7 +549,7 @@ function updateSkyCoordinates(result) {
 async function loadLocalFitsBatch(files) {
     const fitsFiles = files.filter((file) => /\.(fits?|fts)$/i.test(file.name || ''));
     if (!fitsFiles.length) {
-        setObservationStatus('No se encontraron archivos FITS válidos en la selección.', '');
+        setObservationStatus('No valid FITS files were found in the selection.', '');
         return;
     }
     let succeeded = 0;
@@ -560,34 +560,34 @@ async function loadLocalFitsBatch(files) {
     hideFitsProgress();
     setObservationStatus(
         `Carga finalizada: ${succeeded} de ${fitsFiles.length} FITS incorporados.`,
-        `${savedSkyRecords.length} imágenes guardadas`
+        `${savedSkyRecords.length} saved images`
     );
 }
 
 async function loadLocalFits(file, existingRecordId = null) {
     const name = String(file?.name || 'observation.fits');
     if (!/\.(fits?|fts)$/i.test(name)) {
-        setObservationStatus('Formato no válido. Selecciona un FITS sin comprimir.', '');
+        setObservationStatus('Invalid format. Select an uncompressed FITS file.', '');
         return;
     }
     if (file.size > 120 * 1024 * 1024) {
-        setObservationStatus('El archivo supera el límite de 120 MB.', '');
+        setObservationStatus('The file exceeds the 120 MB limit.', '');
         return;
     }
     if (!file.size) {
-        setObservationStatus('El archivo seleccionado está vacío.', '');
+        setObservationStatus('The selected file is empty.', '');
         return;
     }
     try {
-        showFitsProgress('INCORPORANDO IMAGEN FITS', 'Subiendo ' + name + '…', 0);
+        showFitsProgress('INCORPORANDO FITS IMAGE', 'Subiendo ' + name + '…', 0);
         setObservationStatus('Preparando FITS: ' + name, 'Procesando');
         const result = await uploadFitsToBackend(file, (percent) => {
             showFitsProgress('SUBIENDO ARCHIVO', name + ' · ' + (file.size / 1048576).toFixed(1) + ' MB', percent);
         });
         if (!result || !result.id || !result.preview_url || !Number(result.width) || !Number(result.height)) {
-            throw new Error('El servidor no devolvió una vista previa FITS válida.');
+            throw new Error('The server did not return a valid FITS preview.');
         }
-        showFitsProgress('DECODIFICANDO DATOS CIENTÍFICOS', 'Leyendo HDU, imagen y coordenadas WCS…', 84);
+        showFitsProgress('DECODING SCIENCE DATA', 'Leyendo HDU, imagen y coordenadas WCS…', 84);
         const hasWcs = updateSkyCoordinates(result);
         const localId = existingRecordId || (crypto.randomUUID ? crypto.randomUUID() : 'fits-' + Date.now());
         const record = {
@@ -609,9 +609,9 @@ async function loadLocalFits(file, existingRecordId = null) {
         const localViewer = byId('fits-local-viewer');
         const aladinContainer = byId('aladin-lite-div');
         if (!image || !localViewer) throw new Error('No se encuentra el visor FITS local.');
-        showFitsProgress('RENDERIZANDO IMAGEN', 'Descargando la previsualización procesada…', 92);
+        showFitsProgress('RENDERIZANDO IMAGEN', 'Downloading the processed preview…', 92);
         const previewResponse = await fetch(result.preview_url, { cache: 'no-store' });
-        if (!previewResponse.ok) throw new Error('El servidor procesó el FITS, pero la vista previa respondió HTTP ' + previewResponse.status + '.');
+        if (!previewResponse.ok) throw new Error('The server processed the FITS file, but the preview returned HTTP ' + previewResponse.status + '.');
         const previewBlob = await previewResponse.blob();
         if (!previewBlob.type.includes('image/')) throw new Error('La respuesta de vista previa no es una imagen.');
         const previewObjectUrl = URL.createObjectURL(previewBlob);
@@ -642,7 +642,7 @@ async function loadLocalFits(file, existingRecordId = null) {
             'Imagen FITS renderizada y guardada: ' + name,
             'HDU ' + result.hdu_index + ' · ' + result.width + '×' + result.height + (hasWcs ? '' : ' · sin WCS')
         );
-        showFitsProgress('IMAGEN INCORPORADA', 'La imagen ya está visible en el visor local.', 100);
+        showFitsProgress('IMAGEN INCORPORADA', 'The image is already visible in the local viewer.', 100);
         setTimeout(hideFitsProgress, 650);
         return true;
     } catch (error) {
@@ -677,7 +677,7 @@ async function loadRemoteObservationFits(item) {
             (error) => {
                 if (token !== fitsLoadToken) return;
                 console.error('IRSA FITS decoding failed', error);
-                setObservationStatus('IRSA encontró la observación, pero no se pudo decodificar su FITS. Prueba otro producto.', '');
+                setObservationStatus('IRSA found the observation, but its FITS file could not be decoded. Try another product.', '');
             }
         );
     } catch (error) {
@@ -702,9 +702,9 @@ async function ensureAladinApi(){
  if(aladinApiLoadPromise)return aladinApiLoadPromise;
  aladinApiLoadPromise=new Promise((resolve,reject)=>{
   const s=document.createElement('script');s.src='https://aladin.cds.unistra.fr/AladinLite/api/v3/latest/aladin.js';s.async=true;
-  const timer=setTimeout(()=>reject(new Error('CDS no respondió en 20 segundos.')),20000);
-  s.onload=async()=>{try{if(!window.A?.init)throw new Error('La API de Aladin no está disponible.');await window.A.init;clearTimeout(timer);resolve(window.A);}catch(err){clearTimeout(timer);reject(err);}};
-  s.onerror=()=>{clearTimeout(timer);reject(new Error('No se pudo descargar aladin.js desde CDS. La red podría bloquear el servicio.'));};
+  const timer=setTimeout(()=>reject(new Error('CDS did not respond within 20 seconds.')),20000);
+  s.onload=async()=>{try{if(!window.A?.init)throw new Error('The Aladin API is unavailable.');await window.A.init;clearTimeout(timer);resolve(window.A);}catch(err){clearTimeout(timer);reject(err);}};
+  s.onerror=()=>{clearTimeout(timer);reject(new Error('Could not download aladin.js from CDS. The network may be blocking the service.'));};
   document.head.appendChild(s);
  }).catch(err=>{aladinApiLoadPromise=null;throw err;});
  return aladinApiLoadPromise;
@@ -712,7 +712,7 @@ async function ensureAladinApi(){
 function showAladinRetry(error){
  const host=byId('visor-stage');if(!host)return;host.querySelector('.aladin-error-panel')?.remove();
  const panel=document.createElement('div');panel.className='aladin-error-panel';
- panel.innerHTML='<strong>Aladin Lite is unavailable / Aladin Lite no está disponible</strong><p></p><button type="button" class="ylma-btn primary-gold">Retry / Reintentar</button>';
+ panel.innerHTML='<strong>Aladin Lite is unavailable / Aladin Lite is unavailable</strong><p></p><button type="button" class="ylma-btn primary-gold">Retry / Retry</button>';
  panel.querySelector('p').textContent=error?.message||'CDS connection error';
  panel.querySelector('button').addEventListener('click',()=>{panel.remove();initAladinViewer();});host.appendChild(panel);
 }
@@ -724,7 +724,7 @@ async function initAladinViewer(){
   aladin.on('positionChanged',(ra,dec)=>{if(byId('hud-coords'))byId('hud-coords').textContent=`RA: ${ra.toFixed(4)} | Dec: ${dec>=0?'+':''}${dec.toFixed(4)}`;});
   aladin.on('mouseMove',position=>{if(!position||!Number.isFinite(position.ra)||!Number.isFinite(position.dec))return;const cursor=byId('hud-cursor-coords');if(cursor)cursor.textContent=`CURSOR · RA ${position.ra.toFixed(6)}° | Dec ${position.dec>=0?'+':''}${position.dec.toFixed(6)}°`;});
   aladin.gotoRaDec(state.currentRA,state.currentDec);rebuildSkyMarkers();
- }catch(error){console.error('Aladin initialization failed',error);setObservationStatus('Error al iniciar el visor astronómico: '+error.message,'');showAladinRetry(error);}
+ }catch(error){console.error('Aladin initialization failed',error);setObservationStatus('Error initializing the sky viewer: '+error.message,'');showAladinRetry(error);}
 }
 
 async function searchObservations() {
@@ -747,11 +747,11 @@ async function searchObservations() {
         const source = payload.source || 'Fuente no especificada';
         const badge = byId('demo-indicator');
         if (badge) {
-            badge.textContent = demo ? 'MODO DEMO — DATOS NO CIENTÍFICOS' : 'FUENTE: IRSA SIA2 DR1 + QR3';
+            badge.textContent = demo ? 'DEMO MODE — NON-SCIENTIFIC DATA' : 'FUENTE: IRSA SIA2 DR1 + QR3';
             badge.setAttribute('aria-label', source);
         }
-        setObservationStatus(demo ? 'DEMO — no son observaciones científicas reales.' : 'Conectado a IRSA SIA2 · producto FITS seleccionable',
-            `${payload.count ?? observations.length} observación(es)`);
+        setObservationStatus(demo ? 'DEMO — these are not real scientific observations.' : 'Conectado a IRSA SIA2 · producto FITS seleccionable',
+            `${payload.count ?? observations.length} observation(s)`);
         updateSkyPosition();
         renderObservationList();
         showSelectedObservation();
@@ -762,7 +762,7 @@ async function searchObservations() {
         setObservationStatus(`No se pudieron consultar observaciones: ${error.message}`, 'Sin resultados disponibles');
         const badge = byId('demo-indicator');
         if (badge) badge.textContent = 'IRSA SIA2 NO DISPONIBLE';
-        renderObservationList('IRSA no está disponible. No se muestran datos simulados como resultados.');
+        renderObservationList('IRSA is unavailable. Simulated data is not shown as real results.');
         if (aladin) aladin.setImageSurvey('P/DSS2/color');
     }
 }
@@ -779,11 +779,11 @@ async function loadCatalog() {
         const payload = await response.json();
         if (!response.ok) throw new Error(payload.detail || 'Error HTTP ' + response.status);
         catalogEntries = [...(payload.directories || []), ...(payload.files || payload.observations || [])];
-        if (status) status.textContent = catalogEntries.length + ' elemento(s) en ' + (payload.path || 'raíz SPHEREx') + ' · Los FITS se descargan desde IRSA.';
+        if (status) status.textContent = catalogEntries.length + ' elemento(s) en ' + (payload.path || 'SPHEREx root') + ' · Los FITS se descargan desde IRSA.';
         renderCatalogEntries(catalogEntries);
     } catch (error) {
         catalogEntries = [];
-        if (status) status.textContent = 'No se pudo abrir este directorio: ' + error.message + '. Comprueba la URL o inténtalo más tarde.';
+        if (status) status.textContent = 'No se pudo abrir este directorio: ' + error.message + '. Check the URL or try again later.';
         if (results) {
             const link = document.createElement('a');
             link.href = 'https://irsa.ipac.caltech.edu/ibe/data/spherex/';
@@ -850,7 +850,7 @@ function updateObservationControls() {
         main.value = max ? String(Math.min(state.currentIndex + 1, max)) : '';
         main.placeholder = max ? `1–${max}` : 'Sin observaciones';
         main.disabled = max === 0;
-        main.setAttribute('aria-label', max ? `Número de observación, de 1 a ${max}` : 'No hay observaciones');
+        main.setAttribute('aria-label', max ? `Observation number, from 1 to ${max}` : 'No hay observaciones');
     }
     [['split-index-left', state.splitIndexLeft], ['split-index-right', state.splitIndexRight]].forEach(([id, index]) => {
         const input = byId(id);
@@ -888,9 +888,9 @@ function productProxyUrl(item) {
 function showSelectedObservation() {
     const item = observations[state.currentIndex];
     if (!item) {
-        if (byId('info-epoch-label')) byId('info-epoch-label').textContent = 'Sin observación seleccionada';
+        if (byId('info-epoch-label')) byId('info-epoch-label').textContent = 'No observation selected';
         if (byId('hud-survey')) byId('hud-survey').textContent = 'Atlas DSS2 — sin producto SPHEREx disponible';
-        if (byId('timeline-epoch-title')) byId('timeline-epoch-title').textContent = 'No hay épocas reales en estos resultados';
+        if (byId('timeline-epoch-title')) byId('timeline-epoch-title').textContent = 'There are no real epochs in these results';
         if (byId('hud-time-display')) byId('hud-time-display').textContent = '—';
         if (aladin) aladin.setImageSurvey('P/DSS2/color');
         return;
@@ -898,7 +898,7 @@ function showSelectedObservation() {
     const label = observationLabel(item);
     const date = observationDate(item);
     if (byId('info-epoch-label')) byId('info-epoch-label').textContent = label;
-    if (byId('timeline-epoch-title')) byId('timeline-epoch-title').textContent = `OBSERVACIÓN: ${label}`;
+    if (byId('timeline-epoch-title')) byId('timeline-epoch-title').textContent = `OBSERVATION: ${label}`;
     if (byId('hud-time-display')) byId('hud-time-display').textContent = String(date);
     if (byId('hud-survey')) byId('hud-survey').textContent = `IRSA: ${label}`;
     updateSkyPosition();
@@ -908,7 +908,7 @@ function showSelectedObservation() {
     } else if (aladin) {
         setActiveLayer('layer-real');
         aladin.setImageSurvey('P/DSS2/color');
-        setObservationStatus('La observación no incluye una URL FITS descargable.', 'Sin producto FITS');
+        setObservationStatus('The observation does not include a downloadable FITS URL.', 'Sin producto FITS');
     }
 }
 
@@ -919,7 +919,7 @@ function renderObservationList(message = '') {
     if (message || observations.length === 0) {
         const empty = document.createElement('p');
         empty.className = 'doc-text';
-        empty.textContent = message || 'No se encontraron observaciones IRSA para esta búsqueda.';
+        empty.textContent = message || 'No IRSA observations were found for this search.';
         container.appendChild(empty);
         return;
     }
@@ -1003,7 +1003,7 @@ function updateSplitPane(side, index) {
     if (!item) return;
     const viewer = side === 'left' ? aladinLeft : aladinRight;
     const title = byId(side === 'left' ? 'split-left-title' : 'split-right-title');
-    if (title) title.textContent = `${side === 'left' ? 'ÉPOCA A' : 'ÉPOCA B'}: ${observationLabel(item)} — ${observationDate(item)}`;
+    if (title) title.textContent = `${side === 'left' ? 'EPOCH A' : 'EPOCH B'}: ${observationLabel(item)} — ${observationDate(item)}`;
     if (!viewer) return;
     viewer.gotoRaDec(state.currentRA, state.currentDec);
     viewer.setFov(state.currentRadius);
@@ -1046,7 +1046,7 @@ function toggleBlink() {
     }
     if (observations.length < 2) {
         const label = byId('blink-status-label');
-        if (label) label.textContent = 'Carga dos imágenes FITS o consulta al menos dos observaciones IRSA para comparar.';
+        if (label) label.textContent = 'Load two FITS images or query at least two IRSA observations to compare.';
         byId('compare-fits-input')?.click();
         return;
     }
@@ -1072,7 +1072,7 @@ function toggleBlink() {
         const index = Number((flip ? first : second)?.value ?? 1) - 1;
         const item = observations[index];
         const label = byId('blink-status-label');
-        if (label && item) label.textContent = `${flip ? 'ÉPOCA 1' : 'ÉPOCA 2'}: ${observationLabel(item)} — ${observationDate(item)}`;
+        if (label && item) label.textContent = `${flip ? 'EPOCH 1' : 'EPOCH 2'}: ${observationLabel(item)} — ${observationDate(item)}`;
         const proxyUrl = item && productProxyUrl(item);
         if (proxyUrl && aladin && typeof aladin.displayFITS === 'function') {
             try { aladin.displayFITS(proxyUrl, { name: observationLabel(item) }); }

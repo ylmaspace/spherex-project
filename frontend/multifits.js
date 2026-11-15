@@ -22,8 +22,8 @@ async function readApiResponse(response) {
     } catch (_) {
         const contentType = response.headers.get('content-type') || 'unknown content type';
         const preview = body.replace(/<[^>]*>/g, ' ').replace(/\s+/g, ' ').trim().slice(0, 220);
-        throw new Error('La API respondió con contenido no JSON (HTTP ' + response.status + ', ' + contentType + '). ' +
-            (preview || 'Respuesta vacía') + '. Comprueba que Render haya desplegado el backend de esta versión.');
+        throw new Error('The API returned non-JSON content (HTTP ' + response.status + ', ' + contentType + '). ' +
+            (preview || 'Empty response') + '. Check that Render has deployed this backend version.');
     }
     if (!response.ok) throw new Error(payload.detail || payload.message || 'Error HTTP ' + response.status);
     return payload;
@@ -39,7 +39,7 @@ function loadAladin() {
                 return;
             }
             Promise.resolve(api.init).then(() => {
-                if (typeof api.aladin !== 'function') throw new Error('Aladin Lite terminó de iniciar sin A.aladin.');
+                if (typeof api.aladin !== 'function') throw new Error('Aladin Lite finished loading without exposing A.aladin.');
                 resolve(api);
             }).catch(reject);
         };
@@ -69,7 +69,7 @@ function initSphere() {
             showFullscreenControl: true, showCooLocation: true,
             showReticle: true, mode: 'dark'
         });
-        if (!viewer || typeof viewer.displayFITS !== 'function') throw new Error('La versión estable de Aladin Lite no ofrece displayFITS.');
+        if (!viewer || typeof viewer.displayFITS !== 'function') throw new Error('The stable version of Aladin Lite does not support displayFITS.');
         state.viewer = viewer;
         if (typeof viewer.on === 'function') {
             viewer.on('mouseMove', position => {
@@ -111,10 +111,10 @@ function uploadFits(file, progressCallback) {
                 try { payload = JSON.parse(xhr.responseText || '{}'); } catch (_) { payload = {}; }
             }
             if (xhr.status >= 200 && xhr.status < 300) resolve(payload);
-            else reject(new Error(payload.detail || 'El servidor respondió HTTP ' + xhr.status + '.'));
+            else reject(new Error(payload.detail || 'The server responded with HTTP ' + xhr.status + '.'));
         };
-        xhr.onerror = () => reject(new Error('Se perdió la conexión durante la carga.'));
-        xhr.ontimeout = () => reject(new Error('El servidor agotó el tiempo de espera al procesar ' + file.name + '.'));
+        xhr.onerror = () => reject(new Error('The connection was lost during upload.'));
+        xhr.ontimeout = () => reject(new Error('The server timed out while processing ' + file.name + '.'));
         const form = new FormData();
         form.append('file', file, file.name);
         xhr.send(form);
@@ -125,7 +125,7 @@ function displayLayer(viewer, record, layerId) {
     return new Promise((resolve, reject) => {
         let settled = false;
         const timer = setTimeout(() => {
-            if (!settled) { settled = true; reject(new Error('Aladin no confirmó la decodificación de ' + record.filename + '.')); }
+            if (!settled) { settled = true; reject(new Error('Aladin did not confirm decoding of ' + record.filename + '.')); }
         }, 180000);
         try {
             viewer.displayFITS(absoluteApiUrl(record.display_url), {
@@ -152,7 +152,7 @@ async function loadSelectedFiles() {
     const files = Array.from($('multi-fits-input').files || []);
     if (!files.length) { setStatus('Selecciona al menos un archivo FITS.', 0); return; }
     const invalid = files.find(file => !/\.(fits?|fts)(\.gz)?$/i.test(file.name) || !file.size || file.size > MAX_BYTES);
-    if (invalid) { setStatus('Archivo no válido o superior a 120 MB: ' + invalid.name, 0); return; }
+    if (invalid) { setStatus('Invalid file or file larger than 120 MB: ' + invalid.name, 0); return; }
     const packages = buildPackages(files);
     stopBlink();
     $('multi-load-btn').disabled = true;
@@ -170,7 +170,7 @@ async function loadSelectedFiles() {
                         setStatus('Paquete ' + (packageIndex + 1) + '/' + packages.length + ' · ' + file.name + ' · ' + Math.round(percent) + '%',
                             ((completed + percent / 100) / files.length) * 100);
                     });
-                    if (!result.id || !result.display_url) throw new Error('El backend no devolvió un FITS procesado.');
+                    if (!result.id || !result.display_url) throw new Error('The backend did not return a processed FITS file.');
                     const layerId = 'ylma-multifits-' + result.id;
                     const rendered = await displayLayer(viewer, result, layerId);
                     if (rendered.image && typeof rendered.image.setOpacity === 'function') rendered.image.setOpacity(0.58);
@@ -214,7 +214,7 @@ function renderLayerList() {
     list.replaceChildren();
     if (!state.layers.length) {
         const empty = document.createElement('div'); empty.className = 'multi-empty';
-        empty.textContent = 'Todavía no hay imágenes. Selecciona varios archivos FITS para comenzar.';
+        empty.textContent = 'No images yet. Select multiple FITS files to get started.';
         list.appendChild(empty); return;
     }
     state.layers.forEach((layer, index) => {
@@ -340,8 +340,8 @@ function closeSplit() {
     state.splitMode = false;
     $('multi-split-grid').hidden = true;
     $('multi-sphere-viewer').hidden = false;
-    $('multi-view-title').textContent = 'ESFERA CELESTE';
-    $('multi-view-subtitle').textContent = 'Proyección ortográfica · marco ICRS';
+    $('multi-view-title').textContent = 'CELESTIAL SPHERE';
+    $('multi-view-subtitle').textContent = 'Orthographic projection · ICRS frame';
     $('multi-split-btn').classList.remove('active');
     $('multi-sphere-btn').classList.add('active');
     state.viewer && state.viewer.getParentDiv && state.viewer.getParentDiv();
@@ -364,7 +364,7 @@ async function fetchDirectoryTree(raw, recursive = true) {
         const normalizedKey = current.path.replace(/\/$/, '');
         if (visited.has(normalizedKey)) continue;
         visited.add(normalizedKey);
-        if (visited.size > MAX_DIRECTORIES) throw new Error('El directorio contiene más de 500 subdirectorios; reduce el alcance.');
+        if (visited.size > MAX_DIRECTORIES) throw new Error('The directory contains more than 500 subdirectories; narrow the scope.');
         const firstUrl = new URL('/api/catalog', window.location.origin);
         firstUrl.searchParams.set('path', current.path);
         firstUrl.searchParams.set('page', '1');
@@ -373,21 +373,21 @@ async function fetchDirectoryTree(raw, recursive = true) {
         const first = await readApiResponse(firstResponse);
         const dirs = first.directories || [];
         const totalPages = Number(first.fits_pages) || 1;
-        if (totalPages > 100) throw new Error('Una carpeta contiene más de 10.000 FITS; limita la exploración a un subdirectorio.');
+        if (totalPages > 100) throw new Error('A folder contains more than 10,000 FITS files; limit the scan to a subdirectory.');
         const pages = totalPages;
         for (const file of (first.fits_files || first.observations || [])) {
             files.push({...file, directory_path: current.path});
-            if (files.length > MAX_FILES) throw new Error('Se alcanzó el límite de seguridad de 5.000 FITS por exploración.');
+            if (files.length > MAX_FILES) throw new Error('The safety limit of 5,000 FITS files per scan has been reached.');
         }
         for (let page = 2; page <= pages; page++) {
-            $('multi-directory-summary').textContent = 'Leyendo ' + current.path + ' · página ' + page + '/' + pages;
+            $('multi-directory-summary').textContent = 'Leyendo ' + current.path + ' · page ' + page + '/' + pages;
             const url = new URL('/api/catalog', window.location.origin);
             url.searchParams.set('path', current.path); url.searchParams.set('page', String(page)); url.searchParams.set('page_size', '100');
             const response = await fetch(url);
             const payload = await readApiResponse(response);
             for (const file of (payload.fits_files || payload.observations || [])) {
                 files.push({...file, directory_path: current.path});
-                if (files.length > MAX_FILES) throw new Error('Se alcanzó el límite de seguridad de 5.000 FITS por exploración.');
+                if (files.length > MAX_FILES) throw new Error('The safety limit of 5,000 FITS files per scan has been reached.');
             }
         }
         if (recursive && current.depth < 12) {
@@ -401,17 +401,17 @@ async function scanIRsaDirectory() {
     const raw = $('multi-directory-url').value.trim();
     if (!raw) { $('multi-directory-summary').textContent = 'Introduce la URL de una carpeta IRSA.'; return; }
     let parsed;
-    try { parsed = new URL(raw); } catch (_) { $('multi-directory-summary').textContent = 'La URL no tiene un formato válido.'; return; }
+    try { parsed = new URL(raw); } catch (_) { $('multi-directory-summary').textContent = 'The URL format is invalid.'; return; }
     if (parsed.protocol !== 'https:' || parsed.hostname !== 'irsa.ipac.caltech.edu' ||
         !parsed.pathname.startsWith('/ibe/data/spherex/') || parsed.search || parsed.hash || parsed.username || parsed.password) {
-        $('multi-directory-summary').textContent = 'Solo se admiten directorios HTTPS oficiales de IRSA SPHEREx, sin parámetros.';
+        $('multi-directory-summary').textContent = 'Only official IRSA SPHEREx HTTPS directories without query parameters are supported.';
         return;
     }
     $('multi-directory-scan').disabled = true;
     $('multi-directory-import').disabled = true;
     $('multi-directory-files').replaceChildren();
     const recursive = $('multi-directory-recursive').checked;
-    $('multi-directory-summary').textContent = recursive ? 'Explorando el directorio y sus subdirectorios…' : 'Consultando el índice oficial de IRSA…';
+    $('multi-directory-summary').textContent = recursive ? 'Explorando el directorio y sus subdirectorios…' : 'Querying the official IRSA index…';
     try {
         const all = await fetchDirectoryTree(parsed.href.replace(/\/$/, ''), recursive);
         const unique = new Map(all.map(file => [file.path, file]));
@@ -422,8 +422,8 @@ async function scanIRsaDirectory() {
         $('multi-directory-select-all').disabled = state.directoryFiles.length === 0;
         $('multi-directory-select-all').checked = state.directoryFiles.length > 0;
         $('multi-directory-summary').textContent = state.directoryFiles.length + ' FITS encontrados' +
-            (recursive ? ' en el árbol completo de directorios' : ' en esta carpeta') +
-            (state.directoryFiles.length ? ' · organizados por carpeta en paquetes de 4' : ' · no hay FITS en esta carpeta');
+            (recursive ? ' in the full directory tree' : ' in this folder') +
+            (state.directoryFiles.length ? ' · organizados por carpeta en paquetes de 4' : ' · no FITS files in this folder');
         $('multi-directory-import').disabled = state.directoryFiles.length === 0;
     } catch (error) {
         $('multi-directory-summary').textContent = 'Error al explorar: ' + error.message;
@@ -461,7 +461,7 @@ function renderDirectoryFiles() {
             checkbox.className = 'multi-directory-file-select'; checkbox.dataset.index = String(index);
             checkbox.addEventListener('change', updateDirectorySelection);
             const text = document.createElement('span'); text.textContent = file.name;
-            const meta = document.createElement('small'); meta.textContent = file.size_bytes ? (file.size_bytes / 1048576).toFixed(1) + ' MB' : 'Tamaño no indicado por IRSA';
+            const meta = document.createElement('small'); meta.textContent = file.size_bytes ? (file.size_bytes / 1048576).toFixed(1) + ' MB' : 'Size not provided by IRSA';
             text.appendChild(meta); row.append(checkbox, text); filesBox.appendChild(row);
         });
         packageSelect.addEventListener('change', () => {
@@ -501,7 +501,7 @@ async function importDirectorySelection() {
         .map(input => Number(input.dataset.index));
     const selected = selectedIndexes.map(index => state.directoryFiles[index]).filter(Boolean);
     if (!selected.length) return;
-    if (!confirm('Se importarán ' + selected.length + ' FITS en paquetes automáticos de hasta 4 archivos. ¿Continuar?')) return;
+    if (!confirm('The following files will be imported: ' + selected.length + ' FITS files in automatic batches of up to 4 files. Continue?')) return;
     state.importingDirectory = true;
     $('multi-directory-import').disabled = true;
     $('multi-directory-scan').disabled = true;
@@ -533,7 +533,7 @@ async function importDirectorySelection() {
             } catch (error) {
                 failed += pack.length; finished += pack.length;
                 console.error('IRSA package ' + (packageIndex + 1) + ' failed', error);
-                $('multi-directory-summary').textContent = 'Paquete ' + (packageIndex + 1) + ' fallido: ' + error.message + ' · se continúa con el siguiente.';
+                $('multi-directory-summary').textContent = 'Paquete ' + (packageIndex + 1) + ' fallido: ' + error.message + ' · continuing with the next batch.';
                 continue;
             }
             for (const result of payload.results || []) {
@@ -566,10 +566,10 @@ async function importDirectorySelection() {
             $('multi-directory-summary').textContent = 'Paquete ' + (packageIndex + 1) + '/' + packages.length +
                 ' · ' + loaded + ' FITS en esfera · ' + failed + ' errores · ' + finished + '/' + selected.length + ' procesados';
         }
-        setStatus('Importación IRSA terminada · ' + loaded + '/' + selected.length + ' renderizados · ' + failed + ' errores · ' + packages.length + ' paquetes.', 100);
+        setStatus('IRSA import complete · ' + loaded + '/' + selected.length + ' renderizados · ' + failed + ' errores · ' + packages.length + ' paquetes.', 100);
         $('multi-directory-summary').textContent = 'Finalizado: ' + loaded + ' FITS incorporados · ' + failed + ' errores · ' + packages.length + ' paquetes.';
     } catch (error) {
-        setStatus('No se pudo iniciar la importación IRSA: ' + error.message, 0);
+        setStatus('Could not start IRSA import: ' + error.message, 0);
         $('multi-directory-summary').textContent = error.message;
     } finally {
         state.importingDirectory = false;
@@ -583,13 +583,13 @@ async function importDirectorySelection() {
 async function loadWholeDirectoryIntoAladin() {
     const raw = $('multi-stack-url').value.trim();
     let parsed;
-    try { parsed = new URL(raw); } catch (_) { $('multi-stack-status').textContent = 'Introduce una URL válida.'; return; }
+    try { parsed = new URL(raw); } catch (_) { $('multi-stack-status').textContent = 'Enter a valid URL.'; return; }
     if (parsed.protocol !== 'https:' || parsed.hostname !== 'irsa.ipac.caltech.edu' ||
         !parsed.pathname.startsWith('/ibe/data/spherex/') || parsed.search || parsed.hash || parsed.username || parsed.password) {
         $('multi-stack-status').textContent = 'Solo se admiten directorios oficiales HTTPS de IRSA SPHEREx.';
         return;
     }
-    const accepted = confirm('AVISO DE MEMORIA\\n\\nSe intentará cargar cada FITS del directorio como una capa independiente directamente en Aladin Lite. Los datos se procesarán en el navegador y pueden consumir muchísima RAM, ralentizar el equipo o bloquear/cerrar la pestaña. Para carpetas grandes, usa la importación por paquetes.\\n\\n¿Quieres continuar?');
+    const accepted = confirm('MEMORY WARNING\\n\\nEach FITS file in the directory will be loaded as a separate layer directly into Aladin Lite. Data will be processed in your browser and may use substantial RAM, slow down your computer, or freeze/close the tab. For large directories, use batch import.\\n\\nDo you want to continue?');
     if (!accepted) return;
     const button = $('multi-stack-load');
     button.disabled = true;
@@ -597,7 +597,7 @@ async function loadWholeDirectoryIntoAladin() {
     try {
         const files = await fetchDirectoryTree(parsed.href.replace(/\/$/, ''), $('multi-stack-recursive').checked);
         if (!files.length) throw new Error('No se encontraron FITS en esa carpeta.');
-        if (!confirm('Se han encontrado ' + files.length + ' FITS. Aladin intentará mantenerlos como capas del navegador. El consumo de RAM puede ser muy elevado. ¿Cargar las ' + files.length + ' capas?')) return;
+        if (!confirm('Found ' + files.length + ' FITS files. Aladin will try to keep them as browser layers. RAM usage may be very high. Load all ' + files.length + ' capas?')) return;
         stopBlink();
         const viewer = await initSphere();
         viewer.setProjection($('multi-projection').value);
@@ -638,16 +638,16 @@ async function importSingleUrl() {
     const status = $('multi-single-url-status');
     const raw = input.value.trim();
     let parsed;
-    try { parsed = new URL(raw); } catch (_) { status.textContent = 'Introduce una URL válida.'; return; }
+    try { parsed = new URL(raw); } catch (_) { status.textContent = 'Enter a valid URL.'; return; }
     if (parsed.protocol !== 'https:' || parsed.hostname !== 'irsa.ipac.caltech.edu' ||
         !parsed.pathname.startsWith('/ibe/data/spherex/') || !/\.(fits?|fts)(\.gz)?$/i.test(parsed.pathname) ||
         parsed.username || parsed.password) {
-        status.textContent = 'Solo se admiten URL HTTPS directas de FITS en el archivo oficial SPHEREx de IRSA.';
+        status.textContent = 'Only direct HTTPS FITS URLs from the official IRSA SPHEREx archive are supported.';
         return;
     }
     const button = $('multi-single-url-import');
     button.disabled = true;
-    status.textContent = 'Descargando y procesando desde IRSA en el servidor…';
+    status.textContent = 'Downloading and processing from IRSA on the server…';
     try {
         const response = await fetch('/api/fits/import-url', {
             method: 'POST', headers: {'Content-Type':'application/json'},
@@ -667,8 +667,8 @@ async function importSingleUrl() {
         });
         renderLayerList();
         if (state.layers.length === 1 && Number.isFinite(rendered.ra) && Number.isFinite(rendered.dec)) viewer.gotoRaDec(rendered.ra, rendered.dec);
-        status.textContent = 'FITS incorporado y renderizado: ' + payload.filename;
-        setStatus('URL IRSA incorporada correctamente.', 100);
+        status.textContent = 'FITS file added and rendered: ' + payload.filename;
+        setStatus('IRSA URL imported successfully.', 100);
     } catch (error) {
         status.textContent = 'Error al importar URL: ' + error.message;
     } finally {

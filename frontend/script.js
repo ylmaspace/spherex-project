@@ -257,20 +257,23 @@ async function deleteSkyRecord(id) {
     });
 }
 
-function showFitsProgress(title, message, percent = 0) {
+function showFitsProgress(title, message, percent = 0, indeterminate = false) {
     const overlay = byId('fits-progress-overlay');
     if (!overlay) return;
     overlay.classList.add('active');
+    overlay.classList.toggle('is-processing', Boolean(indeterminate));
     overlay.setAttribute('aria-hidden', 'false');
     if (byId('fits-progress-title')) byId('fits-progress-title').textContent = title;
     if (byId('fits-progress-message')) byId('fits-progress-message').textContent = message;
-    if (byId('fits-progress-bar')) byId('fits-progress-bar').style.width = `${percent}%`;
-    if (byId('fits-progress-percent')) byId('fits-progress-percent').textContent = `${Math.round(percent)}%`;
+    const progressBar = byId('fits-progress-bar');
+    if (progressBar) progressBar.style.width = indeterminate ? '36%' : `${percent}%`;
+    if (byId('fits-progress-percent')) byId('fits-progress-percent').textContent =
+        indeterminate ? 'SERVER' : `${Math.round(percent)}%`;
 }
 
 function hideFitsProgress() {
     const overlay = byId('fits-progress-overlay');
-    overlay?.classList.remove('active');
+    overlay?.classList.remove('active', 'is-processing');
     overlay?.setAttribute('aria-hidden', 'true');
 }
 
@@ -334,27 +337,66 @@ function rebuildSkyMarkers() {
 async function uploadFitsToBackend(file, onProgress) {
     return new Promise((resolve, reject) => {
         const xhr = new XMLHttpRequest();
+        let processingTimer = null;
+        let processingStartedAt = 0;
+        const clearProcessingTimer = () => {
+            if (processingTimer) clearInterval(processingTimer);
+            processingTimer = null;
+        };
+        const report = (percent, stage, message) => {
+            if (typeof onProgress === 'function') onProgress(percent, { stage, message });
+        };
         xhr.open('POST', '/api/fits/upload');
-        xhr.timeout = 8 * 60 * 1000;
+        xhr.timeout = 12 * 60 * 1000;
         xhr.responseType = 'json';
         xhr.upload.onprogress = (event) => {
-            if (event.lengthComputable) onProgress(Math.min(78, event.loaded / event.total * 78));
+            if (event.lengthComputable) {
+                report(Math.min(72, event.loaded / event.total * 72), 'uploading',
+                    'Uploading ' + file.name + ' · ' + (event.loaded / 1048576).toFixed(1) + ' / ' +
+                    (event.total / 1048576).toFixed(1) + ' MB');
+            }
         };
-        xhr.upload.onload = () => onProgress(80);
+        xhr.upload.onload = () => {
+            processingStartedAt = Date.now();
+            report(76, 'processing',
+                'Upload complete. The server is inspecting FITS extensions, reading image data and generating the preview. Keep this tab open.');
+            processingTimer = setInterval(() => {
+                const elapsed = Math.floor((Date.now() - processingStartedAt) / 1000);
+                const minutes = Math.floor(elapsed / 60);
+                const seconds = String(elapsed % 60).padStart(2, '0');
+                report(76, 'processing',
+                    'The server is still processing ' + file.name + ' · elapsed ' + minutes + ':' + seconds +
+                    '. Large FITS files can take longer.');
+            }, 10000);
+        };
         xhr.onload = () => {
+            clearProcessingTimer();
             let payload = xhr.response;
             if (!payload || typeof payload !== 'object') {
                 try { payload = JSON.parse(xhr.responseText || '{}'); } catch (_) { payload = {}; }
             }
-            if (xhr.status >= 200 && xhr.status < 300) resolve(payload);
-            else reject(new Error(payload.detail || payload.message || `The server responded with HTTP ${xhr.status}.`));
+            if (xhr.status >= 200 && xhr.status < 300) {
+                report(84, 'server-ready', 'Server processing complete. Preparing the image in your browser…');
+                resolve(payload);
+            } else {
+                reject(new Error(payload.detail || payload.message || `The server responded with HTTP ${xhr.status}.`));
+            }
         };
-        xhr.onerror = () => reject(new Error('The connection was interrupted during upload. Check your connection and try again.'));
-        xhr.ontimeout = () => reject(new Error('The server took more than 8 minutes to process the FITS file. The upload was cancelled; try a smaller file.'));
-        xhr.onabort = () => reject(new Error('The FITS upload was cancelled.'));
+        xhr.onerror = () => {
+            clearProcessingTimer();
+            reject(new Error('The connection was interrupted while the server was processing the FITS file. Check your connection and try again.'));
+        };
+        xhr.ontimeout = () => {
+            clearProcessingTimer();
+            reject(new Error('The server took more than 12 minutes to process the FITS file. Check the server logs; the upload was cancelled.'));
+        };
+        xhr.onabort = () => {
+            clearProcessingTimer();
+            reject(new Error('The FITS upload was cancelled.'));
+        };
         const form = new FormData();
         form.append('file', file, file.name || 'observation.fits');
-        onProgress(2);
+        report(2, 'uploading', 'Preparing ' + file.name + '…');
         xhr.send(form);
     });
 }
@@ -449,8 +491,12 @@ async function loadComparisonFits(file) {
     }
     try {
         showFitsProgress('LOADING SECOND IMAGE', 'Processing ' + file.name + '…', 0);
-        const result = await uploadFitsToBackend(file, (percent) => {
-            showFitsProgress('UPLOADING SECOND IMAGE', file.name, percent);
+        const result = await uploadFitsToBackend(file, (percent, phase) => {
+            const processing = phase?.stage === 'processing';
+            showFitsProgress(
+                processing ? 'PROCESSING SECOND FITS ON SERVER' : 'UPLOADING SECOND IMAGE',
+                phase?.message || file.name, percent, processing
+            );
         });
         if (!result?.id || !result.preview_url) throw new Error('The server did not return a valid preview.');
         showFitsProgress('PREPARING COMPARISON', 'Downloading the second image…', 90);
@@ -561,16 +607,23 @@ async function loadLocalFits(file, existingRecordId = null) {
         setObservationStatus('The selected file is empty.', '');
         return;
     }
+    const token = ++fitsLoadToken;
     try {
         showFitsProgress('INCORPORANDO FITS IMAGE', 'Subiendo ' + name + '…', 0);
         setObservationStatus('Preparando FITS: ' + name, 'Procesando');
-        const result = await uploadFitsToBackend(file, (percent) => {
-            showFitsProgress('UPLOADING FILE', name + ' · ' + (file.size / 1048576).toFixed(1) + ' MB', percent);
+        const result = await uploadFitsToBackend(file, (percent, phase) => {
+            const processing = phase?.stage === 'processing';
+            showFitsProgress(
+                processing ? 'PROCESSING FITS ON SERVER' : 'UPLOADING FILE',
+                phase?.message || (name + ' · ' + (file.size / 1048576).toFixed(1) + ' MB'),
+                percent, processing
+            );
         });
         if (!result || !result.id || !result.preview_url || !Number(result.width) || !Number(result.height)) {
             throw new Error('The server did not return a valid FITS preview.');
         }
         showFitsProgress('DECODING SCIENCE DATA', 'Reading HDU, image data, and WCS coordinates…', 84);
+        if (token !== fitsLoadToken) return false;
         const hasWcs = updateSkyCoordinates(result);
         const localId = existingRecordId || (crypto.randomUUID ? crypto.randomUUID() : 'fits-' + Date.now());
         const record = {
@@ -582,12 +635,7 @@ async function loadLocalFits(file, existingRecordId = null) {
             pixel_scale_arcsec: result.pixel_scale_arcsec, size_bytes: file.size,
             saved_at: new Date().toISOString()
         };
-        await saveSkyRecord(record);
-        savedSkyRecords = await getSavedSkyRecords();
-        renderSavedSkyMap();
-        // The main FITS viewer renders locally processed previews; no Aladin layer is required.
-
-        const token = ++fitsLoadToken;
+        // Rendering the FITS preview is independent from the optional IndexedDB sky map.
         const image = byId('fits-local-image');
         const localViewer = byId('fits-local-viewer');
         if (!image || !localViewer) throw new Error('Local FITS viewer not found.');
@@ -596,16 +644,29 @@ async function loadLocalFits(file, existingRecordId = null) {
         if (!previewResponse.ok) throw new Error('The server processed the FITS file, but the preview returned HTTP ' + previewResponse.status + '.');
         const previewBlob = await previewResponse.blob();
         if (!previewBlob.type.includes('image/')) throw new Error('The preview response is not an image.');
+        if (token !== fitsLoadToken) return false;
         const previewObjectUrl = URL.createObjectURL(previewBlob);
-        if (activeLocalFitsUrl) URL.revokeObjectURL(activeLocalFitsUrl);
+        const previousUrl = activeLocalFitsUrl;
+        try {
+            image.src = previewObjectUrl;
+            if (image.decode) await image.decode();
+            else await new Promise((resolve, reject) => {
+                image.onload = resolve;
+                image.onerror = () => reject(new Error('The browser could not decode the FITS image.'));
+            });
+        } catch (decodeError) {
+            if (previousUrl) image.src = previousUrl;
+            else image.removeAttribute('src');
+            URL.revokeObjectURL(previewObjectUrl);
+            throw new Error('The FITS preview was generated, but the browser could not display it: ' + decodeError.message);
+        }
+        if (token !== fitsLoadToken) {
+            URL.revokeObjectURL(previewObjectUrl);
+            if (previousUrl) image.src = previousUrl;
+            return false;
+        }
         activeLocalFitsUrl = previewObjectUrl;
-        image.src = previewObjectUrl;
-        if (image.decode) await image.decode();
-        else await new Promise((resolve, reject) => {
-            image.onload = resolve;
-            image.onerror = () => reject(new Error('The browser could not decode the FITS image.'));
-        });
-        if (token !== fitsLoadToken) return;
+        if (previousUrl) URL.revokeObjectURL(previousUrl);
         localFitsZoom = 1;
         localFitsPan = { x: 0, y: 0 };
         applyLocalFitsTransform();
@@ -614,13 +675,22 @@ async function loadLocalFits(file, existingRecordId = null) {
             ? 'RA ' + Number(result.ra).toFixed(5) + '° · Dec ' + Number(result.dec).toFixed(5) + '°'
             : 'No WCS data · image displayed without sky coordinates';
         localViewer.hidden = false;
+        let savedToSkyMap = true;
+        try {
+            await saveSkyRecord(record);
+            savedSkyRecords = await getSavedSkyRecords();
+            renderSavedSkyMap();
+        } catch (saveError) {
+            savedToSkyMap = false;
+            console.warn('FITS rendered, but the optional sky-map save failed:', saveError);
+        }
         setActiveLayer('layer-fits');
         if (byId('info-epoch-label')) byId('info-epoch-label').textContent = name;
         if (byId('hud-survey')) byId('hud-survey').textContent = hasWcs ? 'FITS LOCAL · WCS' : 'FITS LOCAL · SIN WCS';
         if (byId('timeline-epoch-title')) byId('timeline-epoch-title').textContent = name;
         if (byId('fits-dropzone')) byId('fits-dropzone').classList.add('fits-loaded');
         setObservationStatus(
-            'FITS image rendered and saved: ' + name,
+            savedToSkyMap ? 'FITS image rendered and saved: ' + name : 'FITS image rendered: ' + name + ' · not saved to the optional sky map',
             'HDU ' + result.hdu_index + ' · ' + result.width + '×' + result.height + (hasWcs ? '' : ' · sin WCS')
         );
         showFitsProgress('IMAGE ADDED', 'The image is already visible in the local viewer.', 100);
@@ -866,7 +936,8 @@ function toggleSplitView() {
     isSplitMode = !isSplitMode;
     byId('btn-split')?.classList.toggle('active', isSplitMode);
     byId('visor-stage')?.classList.toggle('local-split-active', isSplitMode);
-    if (byId('fits-local-viewer')) byId('fits-local-viewer').hidden = isSplitMode;
+    // The primary viewer is the left pane in split mode; keep it visible.
+    if (byId('fits-local-viewer')) byId('fits-local-viewer').hidden = false;
     if (byId('split-local-container')) byId('split-local-container').style.display = isSplitMode ? 'block' : 'none';
     if (byId('normal-timeline')) byId('normal-timeline').style.display = isSplitMode ? 'none' : 'flex';
     if (isSplitMode) renderLocalSplitComparison();
@@ -908,8 +979,13 @@ function stopBlink() {
     isBlinkingActive = false;
     if (blinkInterval) clearInterval(blinkInterval);
     blinkInterval = null;
+    blinkLocalShowingSecond = false;
     const button = byId('blink-start-toggle');
     if (button) button.textContent = 'START BLINK';
+    const preview = byId('blink-local-image');
+    if (preview && activeLocalFitsUrl) preview.src = activeLocalFitsUrl;
+    const label = byId('blink-status-label');
+    if (label && activeLocalFitsUrl) label.textContent = 'IMAGE A: ' + (byId('fits-local-title')?.textContent || 'Primary FITS');
 }
 
 function toggleFullscreen() {

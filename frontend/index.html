@@ -83,12 +83,12 @@
                     <div class="visor-mode-title" id="current-mode-label">INDEPENDENT FITS VIEWER</div>
                     <div class="visor-controls-group">
                         <button class="ylma-btn control-btn active" id="layer-real">DSS / VizieR</button>
-                        <button class="ylma-btn control-btn" id="layer-fits">IBE FITS</button>
-                        <button class="ylma-btn control-btn" id="select-fits-btn" type="button">OPEN LOCAL FITS</button>
+                        <button class="ylma-btn control-btn" id="layer-fits">LOCAL FITS</button>
+                        <button class="ylma-btn control-btn" id="select-fits-btn" type="button">OPEN PRIMARY FITS</button>
                         <input id="local-fits-input" type="file" accept=".fits,.fit,.fts,application/fits" multiple hidden>
                         <input id="compare-fits-input" type="file" accept=".fits,.fit,.fts,application/fits" hidden>
-                        <button class="ylma-btn control-btn" id="btn-split">SPLIT VIEW</button>
-                        <button class="ylma-btn control-btn" id="btn-blink">BLINK COMPARISON</button>
+                        <button class="ylma-btn control-btn" id="btn-split" title="Compare the primary and second local FITS image">SPLIT VIEW</button>
+                        <button class="ylma-btn control-btn" id="btn-blink" title="Alternate between the two local FITS images">BLINK COMPARISON</button>
                         <button class="ylma-btn control-btn" id="btn-fs">FULL SCREEN</button>
                     </div>
                 </div>
@@ -104,7 +104,7 @@
                     <small>HTTPS · SPHEREx IBE file · 120 MB maximum</small>
                 </div>
 
-                <!-- ALADIN LITE STAGE CONTAINER -->
+                <!-- Independent local FITS visualization stage -->
                 <div class="visor-stage" id="visor-stage">
                     <div class="loading-overlay" id="loading-overlay">
                         <div class="spinner"></div>
@@ -114,7 +114,7 @@
                     <div id="fits-dropzone" class="fits-dropzone" role="button" tabindex="0" aria-label="Drop a FITS file here or click to browse">
                         <div class="fits-drop-icon">FITS</div>
                         <strong>ADD IMAGE TO SKY MAP</strong>
-                        <span>Drop your science file here or click to browse</span>
+                        <span>Drop one FITS file to visualize it, or load a second file with Compare</span>
                         <small>FITS / FIT · up to 120 MB · WCS parsing and automatic HDU selection</small>
                         <button class="ylma-btn primary-gold fits-drop-button" id="fits-drop-button" type="button">SELECT FITS FILE</button>
                     </div>
@@ -252,7 +252,7 @@
                 </p>
                 <div class="compare-upload-row">
                     <button type="button" class="ylma-btn primary-gold" id="blink-compare-upload">SUBIR SEGUNDA FITS IMAGE</button>
-                    <span>Compare your primary FITS image with another local image.</span>
+                    <span>Choose a second FITS file from your computer. No Aladin or IRSA connection is needed.</span>
                 </div>
                 <div id="blink-preview-box" style="width: 100%; height: 320px; background: #000; border: 1px solid var(--ylma-gold); position: relative; display: flex; justify-content: center; align-items: center;">
                     <img id="blink-local-image" alt="FITS image alternating during comparison" style="display:none;max-width:100%;max-height:100%;object-fit:contain;">

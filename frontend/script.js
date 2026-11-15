@@ -54,11 +54,11 @@ function setObservationStatus(message, count = '') {
 }
 
 function setupEventListeners() {
-    byId('explore-btn')?.addEventListener('click', async () => {
+    byId('explore-btn')?.addEventListener('click', () => {
         byId('landing-view').classList.remove('active');
         byId('explorer-view').classList.add('active');
-        await initAladinViewer();
-        await searchObservations();
+        setObservationStatus('Local FITS viewer ready. Upload a FITS file to begin.', 'LOCAL MODE');
+        if (byId('demo-indicator')) byId('demo-indicator').textContent = 'LOCAL FITS MODE · NO IRSA / CDS REQUIRED';
     });
     byId('back-home')?.addEventListener('click', () => {
         byId('explorer-view').classList.remove('active');
@@ -142,8 +142,9 @@ function setupEventListeners() {
         await initAladinViewer();
         await searchObservations();
     });
-    byId('layer-real')?.addEventListener('click', () => {
+    byId('layer-real')?.addEventListener('click', async () => {
         setActiveLayer('layer-real');
+        await initAladinViewer();
         if (aladin) aladin.setImageSurvey('P/DSS2/color');
     });
     byId('layer-fits')?.addEventListener('click', () => {
@@ -725,11 +726,9 @@ async function ensureAladinApi(){
  return aladinApiLoadPromise;
 }
 function showAladinRetry(error){
- const host=byId('visor-stage');if(!host)return;host.querySelector('.aladin-error-panel')?.remove();
- const panel=document.createElement('div');panel.className='aladin-error-panel';
- panel.innerHTML='<strong>Aladin Lite is unavailable / Aladin Lite is unavailable</strong><p></p><button type="button" class="ylma-btn primary-gold">Retry / Retry</button>';
- panel.querySelector('p').textContent=error?.message||'CDS connection error';
- panel.querySelector('button').addEventListener('click',()=>{panel.remove();initAladinViewer();});host.appendChild(panel);
+ // Aladin is an optional sky-atlas layer. Never cover or disable the independent local FITS viewer.
+ console.warn('Optional Aladin sky atlas is unavailable:', error);
+ setObservationStatus('Local FITS viewing remains available. Optional Aladin sky atlas is unavailable.', 'LOCAL MODE');
 }
 async function initAladinViewer(){
  if(aladin){aladin.invalidateSize();return;}

@@ -14,6 +14,21 @@ const selectedInterval = () => [2000, 1000, 500, 333].includes(Number($('multi-b
 const safeName = (name) => String(name || 'FITS').replace(/[<>&"]/g, '');
 const absoluteApiUrl = (path) => new URL(path, window.location.origin).href;
 
+async function readApiResponse(response) {
+    const body = await response.text();
+    let payload;
+    try {
+        payload = body ? JSON.parse(body) : {};
+    } catch (_) {
+        const contentType = response.headers.get('content-type') || 'unknown content type';
+        const preview = body.replace(/<[^>]*>/g, ' ').replace(/\s+/g, ' ').trim().slice(0, 220);
+        throw new Error('La API respondió con contenido no JSON (HTTP ' + response.status + ', ' + contentType + '). ' +
+            (preview || 'Respuesta vacía') + '. Comprueba que Render haya desplegado el backend de esta versión.');
+    }
+    if (!response.ok) throw new Error(payload.detail || payload.message || 'Error HTTP ' + response.status);
+    return payload;
+}
+
 function loadAladin() {
     if (aladinReadyPromise) return aladinReadyPromise;
     aladinReadyPromise = new Promise((resolve, reject) => {
@@ -355,8 +370,7 @@ async function fetchDirectoryTree(raw, recursive = true) {
         firstUrl.searchParams.set('page', '1');
         firstUrl.searchParams.set('page_size', '100');
         const firstResponse = await fetch(firstUrl);
-        const first = await firstResponse.json();
-        if (!firstResponse.ok) throw new Error(first.detail || 'IRSA no ha podido listar ' + current.path);
+        const first = await readApiResponse(firstResponse);
         const dirs = first.directories || [];
         const totalPages = Number(first.fits_pages) || 1;
         if (totalPages > 100) throw new Error('Una carpeta contiene más de 10.000 FITS; limita la exploración a un subdirectorio.');
@@ -370,8 +384,7 @@ async function fetchDirectoryTree(raw, recursive = true) {
             const url = new URL('/api/catalog', window.location.origin);
             url.searchParams.set('path', current.path); url.searchParams.set('page', String(page)); url.searchParams.set('page_size', '100');
             const response = await fetch(url);
-            const payload = await response.json();
-            if (!response.ok) throw new Error(payload.detail || 'No se pudo leer la página ' + page + '.');
+            const payload = await readApiResponse(response);
             for (const file of (payload.fits_files || payload.observations || [])) {
                 files.push({...file, directory_path: current.path});
                 if (files.length > MAX_FILES) throw new Error('Se alcanzó el límite de seguridad de 5.000 FITS por exploración.');
@@ -516,8 +529,7 @@ async function importDirectorySelection() {
                     method: 'POST', headers: {'Content-Type':'application/json'},
                     body: JSON.stringify({directory_path: packages[packageIndex].directory, files: pack.map(file => file.path)})
                 });
-                payload = await response.json();
-                if (!response.ok) throw new Error(payload.detail || 'HTTP ' + response.status);
+                payload = await readApiResponse(response);
             } catch (error) {
                 failed += pack.length; finished += pack.length;
                 console.error('IRSA package ' + (packageIndex + 1) + ' failed', error);
@@ -641,8 +653,7 @@ async function importSingleUrl() {
             method: 'POST', headers: {'Content-Type':'application/json'},
             body: JSON.stringify({url: parsed.href})
         });
-        const payload = await response.json();
-        if (!response.ok) throw new Error(payload.detail || 'HTTP ' + response.status);
+        const payload = await readApiResponse(response);
         const viewer = await initSphere();
         const layerId = 'ylma-multifits-' + payload.id;
         const rendered = await displayLayer(viewer, payload, layerId);

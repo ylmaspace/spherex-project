@@ -35,7 +35,7 @@ const API = '';
 document.addEventListener('DOMContentLoaded', () => {
     initUser();
     setupEventListeners();
-    setObservationStatus('Ready to query IRSA.');
+    setObservationStatus('Independent FITS viewer ready. Load a local FITS file to begin.', 'LOCAL MODE');
     loadSavedSkyMap();
     initLocalFitsControls();
 });
@@ -497,10 +497,16 @@ async function loadComparisonFits(file) {
 }
 
 function renderLocalSplitComparison() {
+    const left = byId('split-local-left');
     const right = byId('split-local-right');
+    const leftTitle = byId('split-local-left-title');
     const rightTitle = byId('split-local-right-title');
-    if (!right || !activeLocalFitsUrl || !comparisonLocalFitsUrl) return false;
+    if (!left || !right || !activeLocalFitsUrl || !comparisonLocalFitsUrl) return false;
+
+    // Both panes are fed by the two user-selected FITS previews.
+    left.src = activeLocalFitsUrl;
     right.src = comparisonLocalFitsUrl;
+    if (leftTitle) leftTitle.textContent = byId('fits-local-title')?.textContent || 'FITS A';
     if (rightTitle) rightTitle.textContent = comparisonLocalFitsName || 'FITS B';
     return true;
 }
@@ -683,7 +689,7 @@ async function searchObservations() {
         updateObservationControls();
         setObservationStatus(`Could not query observations: ${error.message}`, 'Sin resultados disponibles');
         const badge = byId('demo-indicator');
-        if (badge) badge.textContent = 'IRSA SIA2 UNAVAILABLE';
+        if (badge) badge.textContent = 'LOCAL FITS MODE · IRSA UNAVAILABLE';
         renderObservationList('IRSA is unavailable. Simulated data is not shown as real results.');
     }
 }

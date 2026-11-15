@@ -1,7 +1,4 @@
 // YLMA SPHEREx Explorer — same-origin API and archive-backed observations only.
-let aladin = null;
-let aladinLeft = null;
-let aladinRight = null;
 let isSplitMode = false;
 let blinkInterval = null;
 let isBlinkingActive = false;
@@ -139,13 +136,11 @@ function setupEventListeners() {
             setObservationStatus('Coordenadas o radio fuera de rango (RA 0–360°, Dec −90–90°, radio >0–10°).', '');
             return;
         }
-        await initAladinViewer();
         await searchObservations();
     });
     byId('layer-real')?.addEventListener('click', async () => {
         setActiveLayer('layer-real');
-        await initAladinViewer();
-        if (aladin) aladin.setImageSurvey('P/DSS2/color');
+        await searchObservations();
     });
     byId('layer-fits')?.addEventListener('click', () => {
         setActiveLayer('layer-fits');
@@ -181,14 +176,14 @@ function setupEventListeners() {
         if (index === null) { event.target.value = String(state.splitIndexLeft + 1); return; }
         state.splitIndexLeft = index;
         event.target.value = String(index + 1);
-        updateSplitPane('left', index);
+        // Local split comparison is controlled by the two FITS preview panes.
     });
     byId('split-index-right')?.addEventListener('change', (event) => {
         const index = parseObservationIndex(event.target.value);
         if (index === null) { event.target.value = String(state.splitIndexRight + 1); return; }
         state.splitIndexRight = index;
         event.target.value = String(index + 1);
-        updateSplitPane('right', index);
+        // Local split comparison is controlled by the two FITS preview panes.
     });
 }
 
@@ -333,24 +328,7 @@ async function loadSavedSkyMap() {
 }
 
 function rebuildSkyMarkers() {
-    if (!aladin || !window.A?.catalog || !window.A?.marker) return;
-    if (!skyMarkerLayer) {
-        skyMarkerLayer = A.catalog({ name: 'YLMA · My FITS images', shape: 'cross', color: '#ffb700', sourceSize: 13 });
-        aladin.addCatalog(skyMarkerLayer);
-    }
-    skyMarkerSources.forEach((source) => {
-        try { skyMarkerLayer.remove(source); } catch (_) {}
-    });
-    skyMarkerSources = [];
-    savedSkyRecords.filter((record) => record.ra !== null && record.dec !== null && Number.isFinite(Number(record.ra)) && Number.isFinite(Number(record.dec))).forEach((record) => {
-        const marker = A.marker(Number(record.ra), Number(record.dec), {
-            popupTitle: String(record.filename).slice(0, 150),
-            popupDesc: `RA: ${Number(record.ra).toFixed(6)}°<br>Dec: ${Number(record.dec).toFixed(6)}°<br>HDU: ${Number(record.hdu_index)}`
-        });
-        skyMarkerSources.push(marker);
-        skyMarkerLayer.addSources(marker);
-    });
-    skyMarkersLoaded = true;
+    // Aladin catalog markers are exclusive to Multi-FITS Lab.
 }
 
 async function uploadFitsToBackend(file, onProgress) {
@@ -542,8 +520,6 @@ function updateSkyCoordinates(result) {
     if (byId('input-radius')) byId('input-radius').value = state.currentRadius.toFixed(5);
     if (byId('info-radec')) byId('info-radec').textContent =
         `${state.currentRA.toFixed(5)}°, ${state.currentDec >= 0 ? '+' : ''}${state.currentDec.toFixed(5)}°`;
-    aladin?.gotoRaDec(state.currentRA, state.currentDec);
-    aladin?.setFov(state.currentRadius);
     return true;
 }
 
@@ -603,12 +579,11 @@ async function loadLocalFits(file, existingRecordId = null) {
         await saveSkyRecord(record);
         savedSkyRecords = await getSavedSkyRecords();
         renderSavedSkyMap();
-        if (hasWcs) rebuildSkyMarkers();
+        // The main FITS viewer renders locally processed previews; no Aladin layer is required.
 
         const token = ++fitsLoadToken;
         const image = byId('fits-local-image');
         const localViewer = byId('fits-local-viewer');
-        const aladinContainer = byId('aladin-lite-div');
         if (!image || !localViewer) throw new Error('Local FITS viewer not found.');
         showFitsProgress('RENDERING IMAGE', 'Downloading the processed preview…', 92);
         const previewResponse = await fetch(result.preview_url, { cache: 'no-store' });
@@ -633,7 +608,6 @@ async function loadLocalFits(file, existingRecordId = null) {
             ? 'RA ' + Number(result.ra).toFixed(5) + '° · Dec ' + Number(result.dec).toFixed(5) + '°'
             : 'No WCS data · image displayed without sky coordinates';
         localViewer.hidden = false;
-        if (aladinContainer) aladinContainer.style.display = 'none';
         setActiveLayer('layer-fits');
         if (byId('info-epoch-label')) byId('info-epoch-label').textContent = name;
         if (byId('hud-survey')) byId('hud-survey').textContent = hasWcs ? 'FITS LOCAL · WCS' : 'FITS LOCAL · SIN WCS';
@@ -654,36 +628,12 @@ async function loadLocalFits(file, existingRecordId = null) {
     }
 }
 
-async function loadRemoteObservationFits(item) {
+async async function loadRemoteObservationFits(item) {
     const sourceUrl = observationUrl(item);
-    if (!sourceUrl || !aladin || typeof aladin.displayFITS !== 'function') {
-        if (aladin) aladin.setImageSurvey('P/DSS2/color');
-        return;
-    }
-    const token = ++fitsLoadToken;
-    const label = observationLabel(item);
-    const proxyUrl = productProxyUrl(item);
-    setObservationStatus(`Downloading and decoding SPHEREx product: ${label}…`, 'Cargando FITS');
-    try {
-        aladin.displayFITS(
-            proxyUrl,
-            { name: label },
-            () => {
-                if (token !== fitsLoadToken) return;
-                setActiveLayer('layer-fits');
-                if (byId('info-epoch-label')) byId('info-epoch-label').textContent = label;
-                if (byId('hud-survey')) byId('hud-survey').textContent = 'SPHEREx FITS · IRSA';
-                setObservationStatus(`Producto FITS decodificado: ${label}`, 'IRSA SIA2');
-            },
-            (error) => {
-                if (token !== fitsLoadToken) return;
-                console.error('IRSA FITS decoding failed', error);
-                setObservationStatus('IRSA found the observation, but its FITS file could not be decoded. Try another product.', '');
-            }
-        );
-    } catch (error) {
-        if (token === fitsLoadToken) setObservationStatus(`Error opening FITS product: ${error.message}`, '');
-    }
+    if (!sourceUrl) { setObservationStatus('This observation has no direct SPHEREx FITS product URL.', 'No FITS product'); return; }
+    const input = byId('fits-url-input');
+    if (input) input.value = sourceUrl;
+    await loadFitsFromUrl();
 }
 
 function parseObservationIndex(value) {
@@ -698,48 +648,7 @@ function setActiveLayer(id) {
 }
 
 let aladinApiLoadPromise=null;
-async function ensureAladinApi(){
- if(window.A?.init&&typeof window.A.aladin==='function'){await window.A.init;return window.A;}
- if(aladinApiLoadPromise)return aladinApiLoadPromise;
- aladinApiLoadPromise=(async()=>{
-  const sources=[
-   'https://aladin.cds.unistra.fr/AladinLite/api/v3/latest/aladin.js',
-   'https://aladin.u-strasbg.fr/AladinLite/api/v3/latest/aladin.js'
-  ];
-  let lastError=null;
-  for(const src of sources){
-   try{
-    await new Promise((resolve,reject)=>{
-     const script=document.createElement('script');script.src=src;script.async=true;
-     const timer=setTimeout(()=>{script.remove();reject(new Error('Timed out loading Aladin Lite from '+new URL(src).hostname));},15000);
-     script.onload=()=>{clearTimeout(timer);resolve();};
-     script.onerror=()=>{clearTimeout(timer);script.remove();reject(new Error('Could not load Aladin Lite from '+new URL(src).hostname));};
-     document.head.appendChild(script);
-    });
-    if(!window.A?.init||typeof window.A.aladin!=='function')throw new Error('Aladin Lite loaded without exposing its API.');
-    await window.A.init;
-    return window.A;
-   }catch(error){lastError=error;console.warn('Aladin Lite source failed:',src,error);}
-  }
-  throw new Error('Aladin Lite could not be loaded from either official CDS endpoint. '+(lastError?.message||''));
- })().catch(err=>{aladinApiLoadPromise=null;throw err;});
- return aladinApiLoadPromise;
-}
-function showAladinRetry(error){
- // Aladin is an optional sky-atlas layer. Never cover or disable the independent local FITS viewer.
- console.warn('Optional Aladin sky atlas is unavailable:', error);
- setObservationStatus('Local FITS viewing remains available. Optional Aladin sky atlas is unavailable.', 'LOCAL MODE');
-}
-async function initAladinViewer(){
- if(aladin){aladin.invalidateSize();return;}
- try{
-  await ensureAladinApi();
-  aladin=A.aladin('#aladin-lite-div',{fov:state.currentRadius,projection:'AIT',cooFrame:'equatorial',showCooGridControl:true,showSimbadPointerControl:true,showCooGrid:true,survey:'P/DSS2/color',target:`${state.currentRA} ${state.currentDec}`});
-  aladin.on('positionChanged',(ra,dec)=>{if(byId('hud-coords'))byId('hud-coords').textContent=`RA: ${ra.toFixed(4)} | Dec: ${dec>=0?'+':''}${dec.toFixed(4)}`;});
-  aladin.on('mouseMove',position=>{if(!position||!Number.isFinite(position.ra)||!Number.isFinite(position.dec))return;const cursor=byId('hud-cursor-coords');if(cursor)cursor.textContent=`CURSOR · RA ${position.ra.toFixed(6)}° | Dec ${position.dec>=0?'+':''}${position.dec.toFixed(6)}°`;});
-  aladin.gotoRaDec(state.currentRA,state.currentDec);rebuildSkyMarkers();
- }catch(error){console.error('Aladin initialization failed',error);setObservationStatus('Error initializing the sky viewer: '+error.message,'');showAladinRetry(error);}
-}
+async // Aladin Lite is not loaded by the main Explorer. It is isolated to Multi-FITS Lab.
 
 async function searchObservations() {
     if (requestController) requestController.abort();
@@ -777,7 +686,6 @@ async function searchObservations() {
         const badge = byId('demo-indicator');
         if (badge) badge.textContent = 'IRSA SIA2 UNAVAILABLE';
         renderObservationList('IRSA is unavailable. Simulated data is not shown as real results.');
-        if (aladin) aladin.setImageSurvey('P/DSS2/color');
     }
 }
 
@@ -849,10 +757,6 @@ function renderCatalogEntries(entries) {
 }
 
 function updateSkyPosition() {
-    if (aladin) {
-        aladin.gotoRaDec(state.currentRA, state.currentDec);
-        aladin.setFov(state.currentRadius);
-    }
     if (byId('info-radec')) byId('info-radec').textContent =
         `${state.currentRA.toFixed(3)}, ${state.currentDec >= 0 ? '+' : ''}${state.currentDec.toFixed(3)}`;
 }
@@ -903,27 +807,19 @@ function showSelectedObservation() {
     const item = observations[state.currentIndex];
     if (!item) {
         if (byId('info-epoch-label')) byId('info-epoch-label').textContent = 'No observation selected';
-        if (byId('hud-survey')) byId('hud-survey').textContent = 'DSS2 Atlas — no SPHEREx product available';
-        if (byId('timeline-epoch-title')) byId('timeline-epoch-title').textContent = 'There are no real epochs in these results';
+        if (byId('hud-survey')) byId('hud-survey').textContent = 'No SPHEREx product loaded';
+        if (byId('timeline-epoch-title')) byId('timeline-epoch-title').textContent = 'No observation selected';
         if (byId('hud-time-display')) byId('hud-time-display').textContent = '—';
-        if (aladin) aladin.setImageSurvey('P/DSS2/color');
         return;
     }
-    const label = observationLabel(item);
-    const date = observationDate(item);
+    const label = observationLabel(item), date = observationDate(item);
     if (byId('info-epoch-label')) byId('info-epoch-label').textContent = label;
     if (byId('timeline-epoch-title')) byId('timeline-epoch-title').textContent = `OBSERVATION: ${label}`;
     if (byId('hud-time-display')) byId('hud-time-display').textContent = String(date);
-    if (byId('hud-survey')) byId('hud-survey').textContent = `IRSA: ${label}`;
+    if (byId('hud-survey')) byId('hud-survey').textContent = `IRSA FITS: ${label}`;
     updateSkyPosition();
-    const url = observationUrl(item);
-    if (url && aladin) {
-        loadRemoteObservationFits(item);
-    } else if (aladin) {
-        setActiveLayer('layer-real');
-        aladin.setImageSurvey('P/DSS2/color');
-        setObservationStatus('The observation does not include a downloadable FITS URL.', 'Sin producto FITS');
-    }
+    if (observationUrl(item)) loadRemoteObservationFits(item);
+    else setObservationStatus('The selected observation has no downloadable FITS product.', 'No FITS product');
 }
 
 function renderObservationList(message = '') {
@@ -953,150 +849,51 @@ function renderObservationList(message = '') {
 }
 
 function toggleSplitView() {
-    if (activeLocalFitsUrl && !comparisonLocalFitsUrl) {
+    if (!activeLocalFitsUrl) {
+        setObservationStatus('Load a primary local FITS image first.', '');
+        byId('local-fits-input')?.click(); return;
+    }
+    if (!comparisonLocalFitsUrl) {
         pendingLocalCompareMode = 'split';
-        setObservationStatus('Load a second FITS image to compare in split view.', '');
-        byId('compare-fits-input')?.click();
-        return;
-    }
-    if (activeLocalFitsUrl && comparisonLocalFitsUrl) {
-        isSplitMode = !isSplitMode;
-        byId('btn-split')?.classList.toggle('active', isSplitMode);
-        const stage = byId('visor-stage');
-        stage?.classList.toggle('local-split-active', isSplitMode);
-        byId('aladin-lite-div').style.display = 'none';
-        byId('normal-timeline').style.display = isSplitMode ? 'none' : 'flex';
-        byId('split-view-container').style.display = 'none';
-        byId('split-local-container').style.display = isSplitMode ? 'block' : 'none';
-        byId('fits-local-viewer').hidden = false;
-        if (isSplitMode) renderLocalSplitComparison();
-        return;
-    }
-    if (!observations.length) {
-        if (activeLocalFitsUrl) {
-            pendingLocalCompareMode = 'split';
-            setObservationStatus('Now select the second FITS image to open split view.', '');
-            byId('compare-fits-input')?.click();
-        } else {
-            setObservationStatus('Add a primary FITS image first.', '');
-            byId('local-fits-input')?.click();
-        }
-        return;
+        setObservationStatus('Select a second FITS image to compare in split view.', '');
+        byId('compare-fits-input')?.click(); return;
     }
     isSplitMode = !isSplitMode;
     byId('btn-split')?.classList.toggle('active', isSplitMode);
-    byId('aladin-lite-div').style.display = isSplitMode ? 'none' : 'block';
-    byId('normal-timeline').style.display = isSplitMode ? 'none' : 'flex';
-    byId('split-view-container').style.display = isSplitMode ? 'grid' : 'none';
-    byId('split-local-container').style.display = 'none';
-    if (isSplitMode) initSplitView();
-    else aladin?.invalidateSize();
-}
-
-async function initSplitView() {
-    if (!window.A?.init) return;
-    try {
-        await A.init;
-        if (!aladinLeft) aladinLeft = A.aladin('#aladin-left-div', {
-            fov: state.currentRadius, projection: 'AIT', survey: 'P/DSS2/color', target: `${state.currentRA} ${state.currentDec}`
-        });
-        if (!aladinRight) aladinRight = A.aladin('#aladin-right-div', {
-            fov: state.currentRadius, projection: 'AIT', survey: 'P/DSS2/color', target: `${state.currentRA} ${state.currentDec}`
-        });
-        aladinLeft.invalidateSize(); aladinRight.invalidateSize();
-        updateSplitPane('left', state.splitIndexLeft);
-        updateSplitPane('right', state.splitIndexRight);
-    } catch (error) {
-        console.error('Split view initialization failed', error);
-        setObservationStatus('Could not start split view.', '');
-    }
-}
-
-function updateSplitPane(side, index) {
-    const item = observations[index];
-    if (!item) return;
-    const viewer = side === 'left' ? aladinLeft : aladinRight;
-    const title = byId(side === 'left' ? 'split-left-title' : 'split-right-title');
-    if (title) title.textContent = `${side === 'left' ? 'EPOCH A' : 'EPOCH B'}: ${observationLabel(item)} — ${observationDate(item)}`;
-    if (!viewer) return;
-    viewer.gotoRaDec(state.currentRA, state.currentDec);
-    viewer.setFov(state.currentRadius);
-    const proxyUrl = productProxyUrl(item);
-    if (proxyUrl && typeof viewer.displayFITS === 'function') {
-        try { viewer.displayFITS(proxyUrl, { name: observationLabel(item) }); }
-        catch (error) { console.warn('Unable to decode IRSA FITS in split view', error); }
-    } else viewer.setImageSurvey('P/DSS2/color');
+    byId('visor-stage')?.classList.toggle('local-split-active', isSplitMode);
+    if (byId('fits-local-viewer')) byId('fits-local-viewer').hidden = isSplitMode;
+    if (byId('split-local-container')) byId('split-local-container').style.display = isSplitMode ? 'block' : 'none';
+    if (byId('normal-timeline')) byId('normal-timeline').style.display = isSplitMode ? 'none' : 'flex';
+    if (isSplitMode) renderLocalSplitComparison();
 }
 
 function toggleBlink() {
     if (isBlinkingActive) { stopBlink(); return; }
-    if (activeLocalFitsUrl && comparisonLocalFitsUrl) {
-        isBlinkingActive = true;
-        const button = byId('blink-start-toggle');
-        if (button) button.textContent = 'DETENER BLINK';
-        const imageA = activeLocalFitsUrl;
-        const imageB = comparisonLocalFitsUrl;
-        const preview = byId('blink-local-image');
-        if (preview) {
-            preview.src = imageA;
-            preview.style.display = 'block';
-        }
-        let showSecond = false;
-        const blinkOnce = () => {
-            showSecond = !showSecond;
-            blinkLocalShowingSecond = showSecond;
-            if (preview) preview.src = showSecond ? imageB : imageA;
-            const label = byId('blink-status-label');
-            if (label) label.textContent = (showSecond ? 'IMAGE B: ' + comparisonLocalFitsName : 'IMAGE A: ' + (byId('fits-local-title')?.textContent || 'Primary FITS'));
-        };
-        if (preview) {
-            preview.style.width = '100%';
-            preview.style.height = '100%';
-            preview.style.objectFit = 'contain';
-        }
-        blinkOnce();
-        blinkInterval = setInterval(blinkOnce, getBlinkIntervalMs());
-        return;
-    }
-    if (observations.length < 2) {
+    if (!activeLocalFitsUrl || !comparisonLocalFitsUrl) {
         const label = byId('blink-status-label');
-        if (label) label.textContent = 'Load two FITS images or query at least two IRSA observations to compare.';
-        byId('compare-fits-input')?.click();
+        if (label) label.textContent = 'Load two local FITS images to start blink comparison.';
+        if (!activeLocalFitsUrl) byId('local-fits-input')?.click();
+        else byId('compare-fits-input')?.click();
         return;
     }
     isBlinkingActive = true;
     const button = byId('blink-start-toggle');
-    if (button) button.textContent = 'DETENER BLINK';
-    const first = byId('blink-epoch-1');
-    const second = byId('blink-epoch-2');
-    [first, second].forEach((select, idx) => {
-        if (!select) return;
-        select.replaceChildren();
-        observations.forEach((item, i) => {
-            const option = document.createElement('option');
-            option.value = String(i + 1);
-            option.textContent = `${observationLabel(item)} — ${observationDate(item)}`;
-            select.appendChild(option);
-        });
-        select.value = String(idx === 0 ? 1 : observations.length);
-    });
-    let flip = false;
+    if (button) button.textContent = 'STOP BLINK';
+    const preview = byId('blink-local-image');
+    if (preview) {
+        preview.src = activeLocalFitsUrl; preview.style.display = 'block';
+        preview.style.width = '100%'; preview.style.height = '100%'; preview.style.objectFit = 'contain';
+    }
+    let showSecond = false;
     const blinkOnce = () => {
-        flip = !flip;
-        const index = Number((flip ? first : second)?.value ?? 1) - 1;
-        const item = observations[index];
+        showSecond = !showSecond; blinkLocalShowingSecond = showSecond;
+        if (preview) preview.src = showSecond ? comparisonLocalFitsUrl : activeLocalFitsUrl;
         const label = byId('blink-status-label');
-        if (label && item) label.textContent = `${flip ? 'EPOCH 1' : 'EPOCH 2'}: ${observationLabel(item)} — ${observationDate(item)}`;
-        const proxyUrl = item && productProxyUrl(item);
-        if (proxyUrl && aladin && typeof aladin.displayFITS === 'function') {
-            try { aladin.displayFITS(proxyUrl, { name: observationLabel(item) }); }
-            catch (error) { console.warn('Blink FITS decoding failed', error); }
-        }
+        if (label) label.textContent = showSecond ? 'IMAGE B: ' + comparisonLocalFitsName :
+            'IMAGE A: ' + (byId('fits-local-title')?.textContent || 'Primary FITS');
     };
-    blinkOnce();
-    blinkInterval = setInterval(blinkOnce, getBlinkIntervalMs());
+    blinkOnce(); blinkInterval = setInterval(blinkOnce, getBlinkIntervalMs());
 }
-
 function getBlinkIntervalMs() {
     const value = Number(byId('blink-interval')?.value || 1000);
     return [2000, 1000, 500, 333].includes(value) ? value : 1000;
